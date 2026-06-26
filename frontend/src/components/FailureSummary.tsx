@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import { useCallback } from 'react';
 import type { AnalysisResult, TestCase } from '../types/analysis';
 import { formatDate } from '../utils/formatters';
 

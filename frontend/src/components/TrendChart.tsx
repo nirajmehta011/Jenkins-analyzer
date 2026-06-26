@@ -88,7 +88,7 @@ export default function TrendChart({ cases, onCategoryClick }: TrendChartProps) 
               dataKey="count"
               radius={[0, 4, 4, 0]}
               cursor="pointer"
-              onClick={(entry: { category: string }) => {
+              onClick={(entry: any) => {
                 if (entry?.category) {
                   onCategoryClick(entry.category as FailureCategory);
                 }
