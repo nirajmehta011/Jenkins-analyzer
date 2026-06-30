@@ -403,7 +403,7 @@ export default function App() {
         {/* Footer */}
         <footer className="mt-16 pt-6 border-t border-slate-800 text-center">
           <p className="text-xs text-slate-600">
-            Jenkins Log Analyzer · Powered by Claude AI · Built with React + Express
+            Jenkins Log Analyzer · Built with React + Express
           </p>
         </footer>
       </div>

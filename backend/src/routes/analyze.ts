@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import JSZip from 'jszip';
+import fs from 'fs';
+import os from 'os';
 import { preprocessLog, extractSurefireXml } from '../services/chunker';
 import { parseLogsLocally } from '../services/localParser';
 import { getFixSuggestions } from '../services/fixSuggester';
@@ -18,8 +20,12 @@ const router = Router();
 
 const MAX_FILE_SIZE = parseInt(process.env['MAX_FILE_SIZE_MB'] || '100', 10) * 1024 * 1024;
 
+// Stream uploads to a temp file on disk instead of buffering the whole file in
+// RAM. This keeps peak memory low for large logs (e.g. 35 MB+), which is what
+// causes OOM crashes on small free-tier instances. The temp file is read into a
+// string only at the point of parsing and is deleted once the request finishes.
 const upload = multer({
-  storage: multer.memoryStorage(),
+  dest: os.tmpdir(),
   limits: { fileSize: MAX_FILE_SIZE },
 });
 
@@ -242,7 +248,8 @@ router.post('/', upload.single('file'), async (req: Request, res: Response): Pro
 
     if (filename.endsWith('.zip')) {
       sendSSE({ stage: 'preprocessing', pct: 10, message: 'Processing ZIP archive contents...' });
-      const zip = await JSZip.loadAsync(req.file.buffer);
+      const zipBuffer = await fs.promises.readFile(req.file.path);
+      const zip = await JSZip.loadAsync(zipBuffer);
 
       // Find files ending with 'log.txt'
       const logEntries = Object.entries(zip.files).filter(
@@ -252,7 +259,7 @@ router.post('/', upload.single('file'), async (req: Request, res: Response): Pro
       if (logEntries.length === 0) {
         // Fallback: extract any text/log files
         sendSSE({ stage: 'preprocessing', pct: 12, message: 'No log.txt files found. Extracting standard logs...' });
-        const fallbackText = await extractZipContents(req.file.buffer);
+        const fallbackText = await extractZipContents(zipBuffer);
         fullText = fallbackText;
         const cleaned = preprocessLog(fallbackText);
 
@@ -337,7 +344,7 @@ router.post('/', upload.single('file'), async (req: Request, res: Response): Pro
       }
     } else {
       // Single log file
-      const rawContent = req.file.buffer.toString('utf-8');
+      const rawContent = await fs.promises.readFile(req.file.path, 'utf-8');
       fullText = rawContent;
 
       if (!rawContent.toLowerCase().includes('fail ') && !hasCustomQueries) {
@@ -414,6 +421,12 @@ router.post('/', upload.single('file'), async (req: Request, res: Response): Pro
     const errMsg = err instanceof Error ? err.message : 'Unknown server error';
     sendSSE({ stage: 'error', pct: 0, error: errMsg });
   } finally {
+    // Always remove the temp upload file so disk doesn't fill up over time.
+    if (req.file?.path) {
+      fs.promises.unlink(req.file.path).catch(() => {
+        /* best-effort cleanup; ignore if already gone */
+      });
+    }
     res.end();
   }
 });
