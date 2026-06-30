@@ -28,14 +28,31 @@ You need two things installed:
 
 ## 2. Get the code
 
+Use **either** method — both give the same result.
+
+**Option A — Git clone** (easiest to pull updates later):
 ```bash
 git clone https://github.com/nirajmehta011/Jenkins-analyzer.git
 cd Jenkins-analyzer
+```
+
+**Option B — Download ZIP** (no Git needed):
+1. Go to https://github.com/nirajmehta011/Jenkins-analyzer
+2. Click **Code ▸ Download ZIP** (use the `main` branch).
+3. Unzip it, then `cd` into the extracted `Jenkins-analyzer` folder in your terminal.
+
+Then, with either option, install dependencies:
+```bash
 npm run install:all      # installs root + backend + frontend dependencies
 ```
 
 `install:all` runs `npm install` in all three folders (root, `backend/`,
 `frontend/`). It can take a minute the first time.
+
+> The ZIP does **not** include `node_modules` or a `.env` file — that's normal.
+> `npm run install:all` creates `node_modules`, and no `.env` is required (log
+> parsing is fully local; an API key, if you want AI fix suggestions, is entered
+> in the UI — see [section 5](#5-optional-ai-fix-suggestions)).
 
 ---
 
