@@ -8,6 +8,7 @@ import type {
   CascadingGroup,
   BuildSummary,
   AnalysisResult,
+  EvidenceContext,
 } from '../types/analysis';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -32,6 +33,8 @@ const PW_RESULT_LINE = /^\s*(\d+)\s+(passed|failed|skipped|flaky)/i;
 const JUNIT_SUITE_START = /^Running\s+([\w.$]+)/;
 // JUnit result:  "Tests run: 5, Failures: 1, Errors: 0, Skipped: 0"
 const JUNIT_SUMMARY = /Tests run:\s*(\d+),\s*Failures:\s*(\d+),\s*Errors:\s*(\d+),\s*Skipped:\s*(\d+)/;
+// Surefire method-level failure:  "testFoo(com.example.FooTest)  Time elapsed: 0.012 s  <<< FAILURE!"
+const SUREFIRE_METHOD_FAILURE = /^(\w+)\(([\w.$]+)\)\s+Time elapsed:[^<]*<<<\s*(FAILURE|ERROR)!?/;
 
 // pytest:  "FAILED tests/test_auth.py::TestAuth::test_login - AssertionError"
 const PYTEST_FAILED = /^FAILED\s+(.+?)(?:\s+-\s+(.+))?$/;
@@ -52,6 +55,33 @@ const CYPRESS_FAIL = /^\s*[✗×]\s+(.+)$/;
 // Generic: "FAIL  test_name" or "PASS  test_name"
 const GENERIC_RESULT = /^(PASS|FAIL|ERROR|SKIP)\s+(.+)/i;
 
+// Some custom reporters (e.g. WebdriverIO-style frameworks with verbose
+// step-by-step execution traces) print a standalone final-verdict line at
+// the end of a test's log: a bare "PASS", or "FAIL <test name>". Unlike
+// GENERIC_RESULT above, a bare PASS has nothing trailing it. These lines are
+// authoritative — they represent the actual final outcome after any
+// retries — and should override noisier heuristics (e.g. a passing
+// `expect(true).toBe(true)` trace line elsewhere in the file being
+// mistaken for failure evidence).
+const STANDALONE_PASS = /^PASS\s*$/;
+const STANDALONE_FAIL = /^FAIL\s+(.+)$/;
+
+/**
+ * Find the last standalone PASS/FAIL verdict line in a log, if any. When
+ * present, this is the authoritative final outcome — including across
+ * retries, since a retry that ultimately passes ends with its own PASS line
+ * after any earlier FAIL lines for the same test.
+ */
+function getFinalVerdict(content: string): 'PASS' | 'FAIL' | null {
+  let verdict: 'PASS' | 'FAIL' | null = null;
+  for (const rawLine of content.split('\n')) {
+    const line = rawLine.trim();
+    if (STANDALONE_PASS.test(line)) verdict = 'PASS';
+    else if (STANDALONE_FAIL.test(line)) verdict = 'FAIL';
+  }
+  return verdict;
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // 2. EXCEPTION & ERROR PATTERNS
 // ────────────────────────────────────────────────────────────────────────────
@@ -65,11 +95,31 @@ const PYTHON_ERROR = /^(\w+(?:Error|Exception|Warning)):\s*(.*)$/;
 // Generic error message after "Error:" or "FAILURE:"
 const GENERIC_ERROR = /(?:Error|FAILURE|FATAL):\s*(.+)/i;
 
+// Plain-English failure sentences some reporters print instead of a
+// structured "Error:"/exception line — e.g. "Timed out waiting for
+// condition to resolve." Without this, a line like that matches none of
+// the patterns above (no Exception/Error suffix, no assertion keywords)
+// and the real failure reason is silently lost even though it's sitting
+// right there.
+const PLAIN_FAILURE_SENTENCE = /^(Timed?\s*out\b.*|Timeout\b.*|Failed to\b.*|Unable to\b.*|Cannot\b.*|Could not\b.*)/i;
+
 // Stack frames
 const JAVA_STACK = /^\s+at\s+([\w.$]+)\.([\w<>]+)\(([^)]+)\)/;
 const JS_STACK = /^\s+at\s+(.+?)\s+\((.+?):(\d+):(\d+)\)/;
 const PYTHON_STACK = /^\s+File\s+"([^"]+)",\s+line\s+(\d+)/;
 const GO_STACK = /^\s+([\w./]+\.go):(\d+)/;
+
+// Numbered execution-step line some custom reporters print for every call,
+// e.g. "617) Function.foo (SnapshotUtils.ts:103) > expect(4799).toBeLessThanOrEqual(1000) (1.1s)".
+// When it contains an expect(...) call, the numbers inside are the actual
+// test-specific values — far more useful than a generic assertion-library
+// header line like "expect(received).toBeLessThanOrEqual(expected)", which
+// carries no information about what actually happened. When no other
+// framework's stack trace format matches (see extractErrorDetails), a
+// handful of these lines also make a reasonable substitute for a real
+// stack trace, since each one names the function/file/line it came from.
+const NUMBERED_STEP_LINE = /^\d+\)\s+.+/;
+const NUMBERED_STEP_ASSERTION = /^\d+\)\s+.*?\bexpect\([^)]*\)\.\w+\([^)]*\)/;
 
 // ────────────────────────────────────────────────────────────────────────────
 // 3. FLAKY DETECTION PATTERNS
@@ -157,6 +207,48 @@ interface ParsedError {
   errorMessage: string | null;
   stackFrames: string[];
   logEvidenceQuote: string | null;
+  evidenceContext: EvidenceContext | null;
+}
+
+/**
+ * Build the structured evidence around a failure line: the 1-2 execution
+ * steps immediately before it, the Expected/Received values, the page URL,
+ * and the failing step's duration — whichever of these are actually present
+ * nearby. Lets QE see "what was happening, what broke, on which page, for
+ * how long" without opening the raw log.
+ */
+function buildEvidenceContext(lines: string[], index: number): EvidenceContext {
+  // Expected/Received and the page URL often sit a few lines beyond the
+  // tight display quote — widen the search window for parsing only.
+  const wideStart = Math.max(0, index - 3);
+  const wideEnd = Math.min(lines.length - 1, index + 12);
+  const wideText = lines.slice(wideStart, wideEnd + 1).join('\n');
+
+  const stripQuotes = (s: string) => s.trim().replace(/^["']|["']$/g, '');
+
+  const expectedMatch = wideText.match(/Expected:\s*(.+)/i);
+  const receivedMatch = wideText.match(/Received:\s*(.+)/i);
+  const urlMatch = wideText.match(/(?:^|\s)on\s+(https?:\/\/\S+)/i);
+  const durationMatch = lines[index]?.match(/\((\d+(?:\.\d+)?\s*(?:ms|s|m))\)\s*$/i);
+
+  // The nearest numbered execution-step lines before this one — the
+  // actions that led up to the failure, not the failure itself.
+  const precedingSteps: string[] = [];
+  for (let j = index - 1; j >= Math.max(0, index - 15) && precedingSteps.length < 2; j--) {
+    const l = lines[j].trim();
+    if (!l || isNoiseLine(l)) continue;
+    if (NUMBERED_STEP_LINE.test(l)) {
+      precedingSteps.unshift(l);
+    }
+  }
+
+  return {
+    precedingSteps,
+    expected: expectedMatch ? stripQuotes(expectedMatch[1]) : null,
+    received: receivedMatch ? stripQuotes(receivedMatch[1]) : null,
+    pageUrl: urlMatch ? urlMatch[1].trim() : null,
+    duration: durationMatch ? durationMatch[1].trim() : null,
+  };
 }
 
 /**
@@ -214,9 +306,31 @@ function extractErrorDetails(text: string): ParsedError {
   }
   stackFrames.reverse();
 
+  // Fallback: none of the known stack-trace formats matched (common for
+  // custom reporters with no framework-recognized trace format). A run of
+  // numbered execution-step lines each name their own function/file/line,
+  // so a handful of them serve as a reasonable substitute for "no stack
+  // trace captured" — better than telling QE nothing at all.
+  if (stackFrames.length === 0) {
+    const pseudoFrames: string[] = [];
+    for (let i = lines.length - 1; i >= 0 && pseudoFrames.length < 8; i--) {
+      const line = lines[i].trim();
+      if (!line || isNoiseLine(line)) continue;
+      if (NUMBERED_STEP_LINE.test(line)) {
+        pseudoFrames.push(line);
+      }
+    }
+    pseudoFrames.reverse();
+    stackFrames.push(...pseudoFrames);
+  }
+
   let exceptionType: string | null = null;
   let errorMessage: string | null = null;
   let logEvidenceQuote: string | null = null;
+  // Tracks which line the evidence was anchored on, so evidenceContext
+  // (preceding steps, duration, etc.) is built around the actual failure
+  // line rather than always the outermost match.
+  let evidenceAnchorIndex: number | null = null;
 
   // 2. Scan bottom-up to find the most recent/actual strong error message
   for (let i = lines.length - 1; i >= 0; i--) {
@@ -230,6 +344,7 @@ function extractErrorDetails(text: string): ParsedError {
       exceptionType = javaMatch[1];
       errorMessage = javaMatch[2] || null;
       logEvidenceQuote = grabContext(i);
+      evidenceAnchorIndex = i;
       break;
     }
 
@@ -239,6 +354,7 @@ function extractErrorDetails(text: string): ParsedError {
       exceptionType = jsMatch[1];
       errorMessage = jsMatch[2];
       logEvidenceQuote = grabContext(i);
+      evidenceAnchorIndex = i;
       break;
     }
 
@@ -248,6 +364,7 @@ function extractErrorDetails(text: string): ParsedError {
       exceptionType = pyMatch[1];
       errorMessage = pyMatch[2] || null;
       logEvidenceQuote = grabContext(i);
+      evidenceAnchorIndex = i;
       break;
     }
 
@@ -256,7 +373,26 @@ function extractErrorDetails(text: string): ParsedError {
     if (genMatch) {
       errorMessage = genMatch[1].trim();
       logEvidenceQuote = grabContext(i);
+      evidenceAnchorIndex = i;
       break;
+    }
+  }
+
+  // 2.5. Fallback to a plain-English failure sentence (e.g. a timeout
+  // description with no "Error:"/exception prefix) before resorting to the
+  // much weaker assertion-line guess in step 3.
+  if (!errorMessage && !exceptionType) {
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      if (isNoiseLine(line)) continue;
+
+      if (PLAIN_FAILURE_SENTENCE.test(line) && line.length < 300) {
+        errorMessage = line;
+        logEvidenceQuote = grabContext(i);
+        evidenceAnchorIndex = i;
+        break;
+      }
     }
   }
 
@@ -268,23 +404,49 @@ function extractErrorDetails(text: string): ParsedError {
       if (isNoiseLine(line)) continue;
 
       if (/(?:expected|actual|assert|expect|received)/i.test(line) && line.length < 500) {
-        // Search upwards (up to 5 lines) to find the expect(...) call line which is more descriptive
+        // Search upwards for a more descriptive line. Prefer a numbered
+        // execution-step line with concrete values (e.g.
+        // "617) ... expect(4799).toBeLessThanOrEqual(1000)") over a generic
+        // assertion-library header line (e.g.
+        // "expect(received).toBeLessThanOrEqual(expected)"), which is
+        // identical across every test using that matcher and tells QE
+        // nothing test-specific.
         let mainLine = line;
-        for (let j = Math.max(0, i - 5); j <= i; j++) {
+        let mainLineIndex = i;
+        let foundConcreteValues = false;
+        for (let j = Math.max(0, i - 10); j <= i; j++) {
           const upLine = lines[j].trim();
-          if (/(?:expect|assert|toBe|toEqual)/i.test(upLine) && !isNoiseLine(upLine)) {
+          if (!upLine || isNoiseLine(upLine)) continue;
+          if (NUMBERED_STEP_ASSERTION.test(upLine)) {
             mainLine = upLine;
+            mainLineIndex = j;
+            foundConcreteValues = true;
             break;
+          }
+        }
+        if (!foundConcreteValues) {
+          for (let j = Math.max(0, i - 5); j <= i; j++) {
+            const upLine = lines[j].trim();
+            if (/(?:expect|assert|toBe|toEqual)/i.test(upLine) && !isNoiseLine(upLine)) {
+              mainLine = upLine;
+              mainLineIndex = j;
+              break;
+            }
           }
         }
         errorMessage = mainLine;
         logEvidenceQuote = grabContext(i);
+        // Anchor evidenceContext on the concrete-values line when found (it's
+        // the real point of failure), else the originally matched line.
+        evidenceAnchorIndex = mainLineIndex;
         break;
       }
     }
   }
 
-  return { exceptionType, errorMessage, stackFrames, logEvidenceQuote };
+  const evidenceContext = evidenceAnchorIndex !== null ? buildEvidenceContext(lines, evidenceAnchorIndex) : null;
+
+  return { exceptionType, errorMessage, stackFrames, logEvidenceQuote, evidenceContext };
 }
 
 /**
@@ -417,16 +579,57 @@ function deriveSymptomVsCause(error: ParsedError, category: FailureCategory): Sy
  */
 function analyzeMultiAttempts(content: string, filePath: string): TestCase | null {
   const lines = content.split('\n');
-  const markerIndices: number[] = [];
 
-  // Find all lines containing "fail " or "FAIL " (case insensitive, with space)
+  // A single log.txt file can interleave the test's own PASS/FAIL outcomes
+  // with its beforeEach/afterEach hook's PASS/FAIL outcomes across several
+  // retry cycles. Prefer the precise "FAIL <name>" convention when present,
+  // and separate markers that belong to the test itself from markers that
+  // belong to a hook — otherwise a hook failure gets miscounted as another
+  // attempt of the test, inflating the attempt count and pulling unrelated
+  // content into the test's own evidence window.
+  const preciseFailMarkers: { index: number; isHook: boolean }[] = [];
+  const passIndices: number[] = [];
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (/\bfail(ed)?\s/i.test(line)) {
-      if (!isNoiseLine(line)) {
+    const trimmed = lines[i].trim();
+    const failMatch = trimmed.match(STANDALONE_FAIL);
+    if (failMatch) {
+      preciseFailMarkers.push({ index: i, isHook: isHookLogName(failMatch[1].trim()) });
+    } else if (STANDALONE_PASS.test(trimmed)) {
+      passIndices.push(i);
+    }
+  }
+
+  const ownTestMarkers = preciseFailMarkers.filter(m => !m.isHook);
+  const hookFailMarkers = preciseFailMarkers.filter(m => m.isHook);
+  const hookMarkerCount = hookFailMarkers.length;
+
+  let markerIndices: number[];
+  // Hard boundaries a context window must never cross into — always a PASS
+  // (a different attempt/hook succeeding), plus a hook's own FAIL when we're
+  // scoped to the test's own markers (so a hook failure's content can't leak
+  // into this test's evidence). Deliberately excludes this test's OWN other
+  // retry markers: those sit close together by design, and clipping there
+  // was cutting a retry's window off before reaching its actual evidence.
+  let hardBoundaryIndices: number[];
+  if (ownTestMarkers.length > 0) {
+    markerIndices = ownTestMarkers.map(m => m.index);
+    hardBoundaryIndices = [...passIndices, ...hookFailMarkers.map(m => m.index)].sort((a, b) => a - b);
+  } else if (preciseFailMarkers.length > 0) {
+    // Every precise FAIL marker in this file belongs to a hook (e.g. the
+    // test's own assertions passed but its afterEach kept failing) — still
+    // worth surfacing as a failure, just without a false "own test" label.
+    markerIndices = preciseFailMarkers.map(m => m.index);
+    hardBoundaryIndices = [...passIndices];
+  } else {
+    // No standalone FAIL <name> convention detected — fall back to a broad
+    // scan for any "fail"/"failed" word, as before.
+    markerIndices = [];
+    for (let i = 0; i < lines.length; i++) {
+      if (/\bfail(ed)?\s/i.test(lines[i]) && !isNoiseLine(lines[i])) {
         markerIndices.push(i);
       }
     }
+    hardBoundaryIndices = [...passIndices];
   }
 
   // Deduplicate marker indices that are too close (within 20 lines) to avoid capturing the same failure dump
@@ -444,9 +647,14 @@ function analyzeMultiAttempts(content: string, filePath: string): TestCase | nul
 
   const parsedErrors: ParsedError[] = [];
   for (const idx of distinctIndices) {
-    // Slice a window around each marker (20 lines before, 30 lines after)
+    // Slice a window around each marker (20 lines before, 30 lines after),
+    // but never cross into the next PASS/FAIL boundary — otherwise a later
+    // attempt's (or a hook's) outcome can leak into this attempt's evidence,
+    // e.g. a trailing "PASS" showing up as "evidence" for a FAILED case.
     const startIdx = Math.max(0, idx - 20);
-    const endIdx = Math.min(lines.length - 1, idx + 30);
+    const naiveEndIdx = Math.min(lines.length - 1, idx + 30);
+    const nextBoundary = hardBoundaryIndices.find(b => b > idx);
+    const endIdx = nextBoundary !== undefined ? Math.min(naiveEndIdx, nextBoundary - 1) : naiveEndIdx;
     const windowLines = lines.slice(startIdx, endIdx + 1);
 
     const error = extractErrorDetails(windowLines.join('\n'));
@@ -464,6 +672,13 @@ function analyzeMultiAttempts(content: string, filePath: string): TestCase | nul
   const numAttempts = distinctIndices.length;
   const finalError = parsedErrors[parsedErrors.length - 1] || { exceptionType: null, errorMessage: null, stackFrames: [], logEvidenceQuote: null };
   const firstError = parsedErrors[0] || finalError;
+  const errorsAreIdentical = parsedErrors.length > 1 && parsedErrors.every(e => e.errorMessage === firstError.errorMessage);
+  // The Main Run (first attempt) is the more representative failure when
+  // attempts differ — later retries can fail for unrelated downstream
+  // reasons (e.g. a timeout caused by state the first failure left behind).
+  // Category/cause/evidence are headlined from it, falling back to the
+  // final attempt only if the Main Run's own extraction came up empty.
+  const primaryError = (firstError.errorMessage || firstError.exceptionType) ? firstError : finalError;
 
   // 1. Compose a highly descriptive errorMessage listing each attempt's results if multiple exist
   let aggregatedErrorMessage = '';
@@ -479,15 +694,37 @@ function analyzeMultiAttempts(content: string, filePath: string): TestCase | nul
     aggregatedErrorMessage = finalError.errorMessage || 'Test case execution failed (detected "fail " marker in log).';
   }
 
-  const category = classifyException(finalError.exceptionType, finalError.errorMessage);
-  const isFlaky = numAttempts > 1 && FLAKY_PATTERNS.some(p => p.test(content));
-  const severity = assignSeverity(category, isFlaky, finalError.exceptionType);
+  let category = classifyException(primaryError.exceptionType, primaryError.errorMessage);
+
+  // A failure that reproduces identically on every attempt is a stable,
+  // reproducible bug — not flakiness — no matter what incidental keywords
+  // (e.g. a stray "retry" or "timeout" mention) show up somewhere else in
+  // an 8000-line log. Only consider it flaky when the attempts actually
+  // produced different results, and scope the keyword scan to the
+  // extracted per-attempt messages rather than the whole raw file, which
+  // is too broad and matches unrelated content that has nothing to do
+  // with why this specific test failed.
+  const attemptMessages = parsedErrors.map(e => e.errorMessage || '').join(' ');
+  const isFlaky = numAttempts > 1 && !errorsAreIdentical && FLAKY_PATTERNS.some(p => p.test(attemptMessages));
+  let severity = assignSeverity(category, isFlaky, primaryError.exceptionType);
+
+  // A beforeAll/beforeEach/afterAll/afterEach hook file (per the
+  // one-log-per-test-case naming convention) failing is a setup/teardown
+  // failure by definition, regardless of what exception happened to occur —
+  // and it can silently block every other test in the same suite, so it's
+  // always treated as CRITICAL rather than deferring to the normal
+  // category/flaky-based severity rules.
+  const isHookFailure = isHookLogName(parseNamesFromPath(filePath).name);
+  if (isHookFailure) {
+    category = 'SetupFailure';
+    severity = 'CRITICAL';
+  }
 
   // 2. Compose highly descriptive failure symptoms
   let symptoms = `SUMMARY OF FAILURE SYMPTOMS:\n`;
   symptoms += `---------------------------\n`;
-  symptoms += `• Final Failure Code/Type: ${finalError.exceptionType || 'Generic Uncaught Failure'}\n`;
-  symptoms += `• Final Failure Message: ${finalError.errorMessage || 'No specific exception message found'}\n`;
+  symptoms += `• Primary Failure Code/Type: ${primaryError.exceptionType || 'Generic Uncaught Failure'}\n`;
+  symptoms += `• Primary Failure Message: ${primaryError.errorMessage || 'No specific exception message found'}\n`;
   
   if (numAttempts > 1) {
     symptoms += `• Execution Context: Test failed consistently over ${numAttempts} execution attempts:\n`;
@@ -515,15 +752,18 @@ function analyzeMultiAttempts(content: string, filePath: string): TestCase | nul
   rca += `2. MULTI-ATTEMPT ANALYSIS:\n`;
   if (numAttempts > 1) {
     rca += `   - Total Execution Attempts: ${numAttempts} (1 main execution + ${numAttempts - 1} retries).\n`;
-    const errorsAreIdentical = parsedErrors.every(e => e.errorMessage === firstError.errorMessage);
     if (errorsAreIdentical) {
-      rca += `   - Analysis: The failure was persistent and identical across all attempts. This rules out random network hiccups, system load delays, or minor scheduling jitter. It confirms a stable and reproducible issue, likely caused by incorrect test environment configuration, missing data dependencies, or a logic regression in the application under test.\n\n`;
+      rca += `   - Analysis: The failure was identical across all ${numAttempts} attempts — this is a stable, reproducible issue, not a flaky one. Retrying will not resolve it; investigate the application/test logic directly.\n\n`;
     } else {
-      rca += `   - Analysis: The failure message changed between retry attempts. This suggests a cascading state issue—for example, the first run's failure might have mutated database records, left browser sessions active, or locked files, causing subsequent attempts to fail with different secondary errors. Focus your investigation on the Main Run error details.\n\n`;
+      rca += `   - Analysis: The failure message differed between attempts. This can mean genuine flakiness (timing, environment), or it can mean our parser captured a different nearby line each time in a verbose log — treat the Main Run details below as the most reliable signal, and check the other attempts in the errorMessage field for the actual pattern before concluding this is flaky.\n\n`;
     }
   } else {
     rca += `   - Total Execution Attempts: 1 (Test runner aborted immediately or was configured with 0 retries).\n`;
     rca += `   - Analysis: The failure occurred on the first execution. Review the details below to determine if this is transient or persistent.\n\n`;
+  }
+
+  if (hookMarkerCount > 0) {
+    rca += `   - Note: ${hookMarkerCount} beforeEach/afterEach hook failure(s) were also detected interleaved in this same log. That may be a separate cleanup/setup issue rather than part of this test's own failure — check the suite's hook logs too.\n\n`;
   }
 
   rca += `3. TECHNICAL ANALYSIS & STACK PATH:\n`;
@@ -538,10 +778,12 @@ function analyzeMultiAttempts(content: string, filePath: string): TestCase | nul
   }
 
   rca += `4. SUGGESTED FOCUS AREA BASED ON ERROR CATEGORY:\n`;
-  const dynamicAnalysedCause = deriveDynamicAnalysedCause(finalError, category);
+  const dynamicAnalysedCause = deriveDynamicAnalysedCause(primaryError, category);
   rca += `   - ${dynamicAnalysedCause}`;
 
-  const { suite, name } = parseNamesFromPath(filePath);
+  const pathNames = parseNamesFromPath(filePath);
+  const contextMeta = extractContextMetadata(content);
+  const { suite, name } = resolveNames(pathNames, contextMeta.cleanTestName);
 
   return {
     id: `LOCAL-TEMP`,
@@ -564,8 +806,13 @@ function analyzeMultiAttempts(content: string, filePath: string): TestCase | nul
     category,
     fixSuggestion: null,
     fixComplexity: null,
-    logEvidenceQuote: finalError.logEvidenceQuote || firstError.logEvidenceQuote,
+    logEvidenceQuote: primaryError.logEvidenceQuote || finalError.logEvidenceQuote,
     parserConfidence: finalError.exceptionType ? 'HIGH' : (finalError.errorMessage ? 'MEDIUM' : 'LOW'),
+    testUserEmail: contextMeta.testUserEmail,
+    relatedLinks: contextMeta.relatedLinks,
+    attemptCount: numAttempts,
+    isHookFailure,
+    evidenceContext: primaryError.evidenceContext || finalError.evidenceContext,
   };
 }
 
@@ -577,7 +824,7 @@ function analyzeMultiAttempts(content: string, filePath: string): TestCase | nul
  * Parse a single log file content into TestCase objects.
  * Handles multiple test framework formats.
  */
-function parseLogFile(
+export function parseLogFile(
   content: string,
   filePath: string
 ): TestCase[] {
@@ -588,21 +835,116 @@ function parseLogFile(
 
   // 1. JUnit / Surefire / TestNG results
   let currentSuite: string | null = null;
+  let currentSuiteStart = 0;
+  const suiteHasIndividualFailure = new Map<string, boolean>();
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
     const suiteMatch = line.match(JUNIT_SUITE_START);
     if (suiteMatch) {
       currentSuite = suiteMatch[1];
+      currentSuiteStart = i;
+      continue;
+    }
+
+    // Method-level failure: "testFoo(com.example.FooTest)  Time elapsed: 0.012 s  <<< FAILURE!"
+    const methodMatch = line.match(SUREFIRE_METHOD_FAILURE);
+    if (methodMatch) {
+      const [, methodName, className, kind] = methodMatch;
+      const bodyLines: string[] = [];
+      for (let j = i + 1; j < lines.length; j++) {
+        if (SUREFIRE_METHOD_FAILURE.test(lines[j]) || JUNIT_SUITE_START.test(lines[j]) || JUNIT_SUMMARY.test(lines[j])) break;
+        bodyLines.push(lines[j]);
+      }
+      const body = bodyLines.join('\n');
+      const error = extractErrorDetails(body);
+      const category = classifyException(error.exceptionType, error.errorMessage);
+      const isFlaky = FLAKY_PATTERNS.some(p => p.test(body));
+      const severity = assignSeverity(category, isFlaky, error.exceptionType);
+
+      cases.push({
+        id: `LOCAL-${cases.length + 1}`,
+        name: methodName,
+        suite: className,
+        status: kind === 'ERROR' ? 'ERROR' : 'FAILED',
+        duration: null,
+        isFlaky,
+        isCascading: false,
+        cascadeGroupId: null,
+        exceptionType: error.exceptionType,
+        errorMessage: error.errorMessage,
+        stackFrames: error.stackFrames,
+        rootCause: deriveRootCause(error, category),
+        symptomVsCause: deriveSymptomVsCause(error, category),
+        severity,
+        category,
+        fixSuggestion: null,
+        fixComplexity: null,
+        logEvidenceQuote: error.logEvidenceQuote,
+        parserConfidence: error.exceptionType ? 'HIGH' : (error.errorMessage ? 'MEDIUM' : 'LOW'),
+        testUserEmail: null,
+        relatedLinks: [],
+        attemptCount: null,
+        isHookFailure: false,
+        evidenceContext: error.evidenceContext,
+      });
+      suiteHasIndividualFailure.set(className, true);
       continue;
     }
 
     // "Tests run: N, Failures: N, Errors: N, Skipped: N, Time elapsed: Ns - in com.x.y.TestClass"
     const summaryMatch = line.match(JUNIT_SUMMARY);
     if (summaryMatch) {
+      // Only treat this as a per-suite summary if it explicitly names the
+      // class ("- in com.x.Test"). Maven also prints a bare aggregate totals
+      // line ("Tests run: 12, Failures: 1, Errors: 1") in its final reactor
+      // summary — without the "- in ClassName" suffix that would otherwise
+      // get misattributed to whichever suite happened to run last.
       const inClassMatch = line.match(/in\s+([\w.$]+)/);
-      if (inClassMatch) {
-        currentSuite = inClassMatch[1];
+      const className = inClassMatch ? inClassMatch[1] : null;
+      if (className) currentSuite = className;
+
+      const failures = parseInt(summaryMatch[2], 10);
+      const errors = parseInt(summaryMatch[3], 10);
+
+      // Safety net: the suite reported failures/errors but no individual
+      // SUREFIRE_METHOD_FAILURE line was captured for it (e.g. a truncated
+      // log or an unfamiliar Surefire formatter) — emit one aggregate case
+      // so the reported failure isn't silently dropped.
+      if ((failures > 0 || errors > 0) && className && !suiteHasIndividualFailure.get(className)) {
+        const suiteBody = lines.slice(currentSuiteStart, i + 1).join('\n');
+        const error = extractErrorDetails(suiteBody);
+        const category = classifyException(error.exceptionType, error.errorMessage);
+        const isFlaky = FLAKY_PATTERNS.some(p => p.test(suiteBody));
+        const severity = assignSeverity(category, isFlaky, error.exceptionType);
+
+        cases.push({
+          id: `LOCAL-${cases.length + 1}`,
+          name: className.split('.').pop() || className,
+          suite: className,
+          status: errors > 0 ? 'ERROR' : 'FAILED',
+          duration: null,
+          isFlaky,
+          isCascading: false,
+          cascadeGroupId: null,
+          exceptionType: error.exceptionType,
+          errorMessage: error.errorMessage || `${failures} failure(s), ${errors} error(s) reported for ${className}`,
+          stackFrames: error.stackFrames,
+          rootCause: deriveRootCause(error, category),
+          symptomVsCause: deriveSymptomVsCause(error, category),
+          severity,
+          category,
+          fixSuggestion: null,
+          fixComplexity: null,
+          logEvidenceQuote: error.logEvidenceQuote,
+          parserConfidence: error.exceptionType ? 'MEDIUM' : 'LOW',
+          testUserEmail: null,
+          relatedLinks: [],
+          attemptCount: null,
+          isHookFailure: false,
+          evidenceContext: error.evidenceContext,
+        });
       }
       continue;
     }
@@ -646,6 +988,11 @@ function parseLogFile(
         fixComplexity: null,
         logEvidenceQuote: error.logEvidenceQuote,
         parserConfidence: error.exceptionType ? 'HIGH' : (error.errorMessage ? 'MEDIUM' : 'LOW'),
+        testUserEmail: null,
+        relatedLinks: [],
+        attemptCount: null,
+        isHookFailure: false,
+        evidenceContext: error.evidenceContext,
       });
     }
   }
@@ -694,6 +1041,11 @@ function parseLogFile(
         fixComplexity: null,
         logEvidenceQuote: error.logEvidenceQuote,
         parserConfidence: error.exceptionType ? 'HIGH' : (error.errorMessage ? 'MEDIUM' : 'LOW'),
+        testUserEmail: null,
+        relatedLinks: [],
+        attemptCount: null,
+        isHookFailure: false,
+        evidenceContext: error.evidenceContext,
       });
     }
   }
@@ -735,6 +1087,11 @@ function parseLogFile(
         fixComplexity: null,
         logEvidenceQuote: error.logEvidenceQuote,
         parserConfidence: error.exceptionType ? 'HIGH' : (error.errorMessage ? 'MEDIUM' : 'LOW'),
+        testUserEmail: null,
+        relatedLinks: [],
+        attemptCount: null,
+        isHookFailure: false,
+        evidenceContext: error.evidenceContext,
       });
     }
   }
@@ -779,6 +1136,11 @@ function parseLogFile(
           fixComplexity: null,
           logEvidenceQuote: error.logEvidenceQuote,
           parserConfidence: error.exceptionType ? 'HIGH' : (error.errorMessage ? 'MEDIUM' : 'LOW'),
+          testUserEmail: null,
+          relatedLinks: [],
+          attemptCount: null,
+          isHookFailure: false,
+          evidenceContext: error.evidenceContext,
         });
       }
     }
@@ -820,12 +1182,26 @@ function parseLogFile(
         fixComplexity: null,
         logEvidenceQuote: error.logEvidenceQuote,
         parserConfidence: error.exceptionType ? 'HIGH' : (error.errorMessage ? 'MEDIUM' : 'LOW'),
+        testUserEmail: null,
+        relatedLinks: [],
+        attemptCount: null,
+        isHookFailure: false,
+        evidenceContext: error.evidenceContext,
       });
     }
   }
 
   // ── Strategy B: Fallback — whole-file error extraction ────────────
   // If no framework-specific patterns matched, treat the entire file as one test
+  if (cases.length === 0 && getFinalVerdict(content) === 'PASS') {
+    // The log's own last word is an authoritative PASS — trust it over the
+    // heuristics below, which scan for anything error/assertion-shaped
+    // anywhere in the file and can't tell a passing trace line from a
+    // failing one. This also correctly resolves retries: if an earlier
+    // attempt failed but the final one passed, the final PASS wins.
+    return cases;
+  }
+
   if (cases.length === 0) {
     const multiCase = analyzeMultiAttempts(content, filePath);
     if (multiCase) {
@@ -837,10 +1213,18 @@ function parseLogFile(
                          error.errorMessage !== null;
 
       if (hasFailure) {
-        const { suite, name } = parseNamesFromPath(filePath);
-        const category = classifyException(error.exceptionType, error.errorMessage);
+        const pathNames = parseNamesFromPath(filePath);
+        const contextMeta = extractContextMetadata(content);
+        const { suite, name } = resolveNames(pathNames, contextMeta.cleanTestName);
+        let category = classifyException(error.exceptionType, error.errorMessage);
         const isFlaky = FLAKY_PATTERNS.some(p => p.test(content));
-        const severity = assignSeverity(category, isFlaky, error.exceptionType);
+        let severity = assignSeverity(category, isFlaky, error.exceptionType);
+
+        const isHookFailure = isHookLogName(pathNames.name);
+        if (isHookFailure) {
+          category = 'SetupFailure';
+          severity = 'CRITICAL';
+        }
 
         cases.push({
           id: `LOCAL-${cases.length + 1}`,
@@ -862,6 +1246,11 @@ function parseLogFile(
           fixComplexity: null,
           logEvidenceQuote: error.logEvidenceQuote,
           parserConfidence: error.exceptionType ? 'MEDIUM' : 'LOW',
+          testUserEmail: contextMeta.testUserEmail,
+          relatedLinks: contextMeta.relatedLinks,
+          attemptCount: 1,
+          isHookFailure,
+          evidenceContext: error.evidenceContext,
         });
       }
     }
@@ -874,7 +1263,20 @@ function parseLogFile(
 // 8. CASCADING GROUP DETECTION
 // ────────────────────────────────────────────────────────────────────────────
 
-function detectCascadingGroups(cases: TestCase[]): CascadingGroup[] {
+// analyzeMultiAttempts() wraps every multi-attempt failure's message in the
+// same fixed boilerplate ("Failed persistently after N attempts (...):  •
+// Main Run: ..."). That wrapper alone is long enough to fill the fingerprint
+// substring below, which would make any two unrelated multi-attempt
+// failures collide into one fake cascade group. Strip it before
+// fingerprinting so the comparison is based on the actual failure content.
+function stripAttemptWrapperPrefix(message: string): string {
+  return message
+    .replace(/^Failed persistently after \d+ attempts? \([^)]*\):\s*/i, '')
+    .replace(/^•\s*Main Run:\s*/i, '')
+    .trim();
+}
+
+export function detectCascadingGroups(cases: TestCase[]): CascadingGroup[] {
   const failedCases = cases.filter(c => c.status === 'FAILED' || c.status === 'ERROR');
   if (failedCases.length < 2) return [];
 
@@ -882,25 +1284,45 @@ function detectCascadingGroups(cases: TestCase[]): CascadingGroup[] {
   const groups = new Map<string, TestCase[]>();
 
   for (const tc of failedCases) {
-    // Build a fingerprint from exception type + first non-library stack frame
-    let fingerprint = tc.exceptionType || 'unknown';
-    if (tc.stackFrames.length > 0) {
-      // Use first application frame as part of fingerprint
-      const appFrame = tc.stackFrames.find(f => {
-        const lower = f.toLowerCase();
-        return !lower.includes('node_modules') &&
-               !lower.includes('java.') &&
-               !lower.includes('javax.') &&
-               !lower.includes('internal/');
-      });
-      if (appFrame) {
-        fingerprint += `|${appFrame.trim().substring(0, 100)}`;
+    // Build a fingerprint from exception type + first non-library stack frame.
+    // Cases with neither an exception type nor an error message have no
+    // reliable signal to cluster on — skip them rather than lumping every
+    // unparsed failure into one artificial "unknown" cascade group.
+    let fingerprint: string | null = null;
+
+    if (tc.exceptionType) {
+      fingerprint = tc.exceptionType;
+      if (tc.stackFrames.length > 0) {
+        // Use first application frame as part of fingerprint
+        const appFrame = tc.stackFrames.find(f => {
+          const lower = f.toLowerCase();
+          return !lower.includes('node_modules') &&
+                 !lower.includes('java.') &&
+                 !lower.includes('javax.') &&
+                 !lower.includes('internal/');
+        });
+        if (appFrame) {
+          fingerprint += `|${appFrame.trim().substring(0, 100)}`;
+        }
       }
     }
-    // Also group by identical error messages
+    // Group by identical error messages when available — more specific than
+    // exception type + stack frame alone.
     if (tc.errorMessage) {
-      fingerprint = `${tc.exceptionType || 'error'}|${tc.errorMessage.substring(0, 80)}`;
+      const cleanedMessage = stripAttemptWrapperPrefix(tc.errorMessage).substring(0, 80);
+      // Without an exception type, a shared error message alone is a weak
+      // signal — generic reporter boilerplate (e.g. a bare
+      // "expect(received).toBeLessThanOrEqual(expected)" assertion header)
+      // is identical across many unrelated tests that happen to use the
+      // same assertion helper. Require the suite to also match in that
+      // case, since two failures with generic-looking messages in
+      // completely different suites are almost never the same root cause.
+      fingerprint = tc.exceptionType
+        ? `${tc.exceptionType}|${cleanedMessage}`
+        : `${tc.suite || 'no-suite'}|${cleanedMessage}`;
     }
+
+    if (!fingerprint) continue;
 
     const existing = groups.get(fingerprint) || [];
     existing.push(tc);
@@ -1021,6 +1443,17 @@ function extractBuildSummary(fullText: string, cases: TestCase[]): BuildSummary 
 // 10. PATH PARSER (extracted from analyze.ts for reuse)
 // ────────────────────────────────────────────────────────────────────────────
 
+// Jenkins' one-log-per-test-case archive convention names hook logs exactly
+// this: beforeAll-log.txt, beforeEach-log.txt, afterAll-log.txt,
+// afterEach-log.txt. A failure in one of these isn't "a test called
+// beforeEach" — it's a setup/teardown failure that can silently prevent
+// every other test in the same suite folder from running at all.
+const HOOK_NAME_PATTERN = /^(beforeAll|beforeEach|afterAll|afterEach)$/i;
+
+function isHookLogName(name: string): boolean {
+  return HOOK_NAME_PATTERN.test(name.trim());
+}
+
 function parseNamesFromPath(path: string): { suite: string; name: string } {
   const cleanPath = path.replace(/-log\.txt$/i, '').replace(/log\.txt$/i, '').replace(/\.txt$/i, '');
   const parts = cleanPath.split('/');
@@ -1042,6 +1475,75 @@ function parseNamesFromPath(path: string): { suite: string; name: string } {
   }
 
   return { suite: 'DefaultSuite', name: lastPart || 'test' };
+}
+
+/**
+ * Prefer a clean test name parsed from the log's own content (e.g. a
+ * "Test: <suite> > <name>" header) over one derived from a file path, which
+ * can be truncated by export tooling (many CI systems cap artifact
+ * filenames at ~100 chars) or reduced to an unreadable hyphenated slug.
+ */
+function resolveNames(
+  pathNames: { suite: string; name: string },
+  cleanTestName: string | null
+): { suite: string; name: string } {
+  if (!cleanTestName) return pathNames;
+
+  const separatorMatch = cleanTestName.match(/^(.*?)\s*>\s*([^>]+)$/);
+  if (separatorMatch) {
+    return { suite: separatorMatch[1].trim(), name: separatorMatch[2].trim() };
+  }
+  return { suite: pathNames.suite, name: cleanTestName };
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// 10b. CONTEXT METADATA EXTRACTION — surfaces info QE needs to debug fast
+// ────────────────────────────────────────────────────────────────────────────
+
+// Test-account email a run was executed as — common in E2E/UI automation
+// logs, rarely captured today even though it's often the first thing QE
+// needs (e.g. "was this a permissions issue for this specific account?").
+const EMAIL_PATTERN = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
+
+// A "Label: https://..." line — many custom reporters print artifact links
+// this way (screenshot, HTML diff, a link back to the log itself). Captured
+// as {label, url} pairs so the UI can render them as one-click links instead
+// of QE having to grep the raw log for a URL.
+const LABELED_LINK_LINE = /^\s*([A-Za-z][A-Za-z0-9 /]{2,40}):\s*(https?:\/\/\S+)\s*$/;
+
+// A "Test: <full readable name>" header some custom reporters print — more
+// reliable than a (possibly truncated) file path.
+const TEST_NAME_HEADER = /^Test:\s*(.+)$/m;
+
+interface ContextMetadata {
+  cleanTestName: string | null;
+  testUserEmail: string | null;
+  relatedLinks: { label: string; url: string }[];
+}
+
+function extractContextMetadata(content: string): ContextMetadata {
+  const emailMatch = content.match(EMAIL_PATTERN);
+  const nameMatch = content.match(TEST_NAME_HEADER);
+
+  const relatedLinks: { label: string; url: string }[] = [];
+  const seenUrls = new Set<string>();
+  for (const line of content.split('\n')) {
+    const linkMatch = line.match(LABELED_LINK_LINE);
+    if (linkMatch) {
+      const [, label, url] = linkMatch;
+      if (!seenUrls.has(url)) {
+        seenUrls.add(url);
+        relatedLinks.push({ label: label.trim(), url });
+        if (relatedLinks.length >= 5) break;
+      }
+    }
+  }
+
+  return {
+    cleanTestName: nameMatch ? nameMatch[1].trim() : null,
+    testUserEmail: emailMatch ? emailMatch[0] : null,
+    relatedLinks,
+  };
 }
 
 // ────────────────────────────────────────────────────────────────────────────

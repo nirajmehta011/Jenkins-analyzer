@@ -1,0 +1,110 @@
+
+------------------------------------------------------------------------------------------------------------------------
+Package: e2e-tests-digital
+Test: New CC Validate Used In Forms Draft > New CC - Validate "Used in forms" model in resource library screen when draft enabled / NewCC-DQE-T76
+------------------------------------------------------------------------------------------------------------------------
+
+680) NewCCResourcesLibraryPage.addNewFile (NewCCResourcesLibraryPage.ts:181) > Function.toBe (CommonFunctions.ts:288) > expect('A file with this name already exists').toBe('File uploaded successfully') (127ms)
+
+FAIL New CC - Validate "Used in forms" model in resource library screen when draft enabled / NewCC-DQE-T76
+
+Expected: "File uploaded successfully"
+Received: "A file with this name already exists"
+    at Function.toBe (<repoPath>/packages/digital-page-objects/src/utilities/CommonFunctions.ts:288:31)
+
+------------------------------------------------------------------------------------------------------------------------
+
+9000) Filler.step (Filler.ts:0) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9001) Filler.step (Filler.ts:1) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9002) Filler.step (Filler.ts:2) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9003) Filler.step (Filler.ts:3) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9004) Filler.step (Filler.ts:4) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9005) Filler.step (Filler.ts:5) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9006) Filler.step (Filler.ts:6) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9007) Filler.step (Filler.ts:7) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9008) Filler.step (Filler.ts:8) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9009) Filler.step (Filler.ts:9) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9010) Filler.step (Filler.ts:10) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9011) Filler.step (Filler.ts:11) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9012) Filler.step (Filler.ts:12) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9013) Filler.step (Filler.ts:13) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9014) Filler.step (Filler.ts:14) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9015) Filler.step (Filler.ts:15) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9016) Filler.step (Filler.ts:16) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9017) Filler.step (Filler.ts:17) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9018) Filler.step (Filler.ts:18) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9019) Filler.step (Filler.ts:19) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9020) Filler.step (Filler.ts:20) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9021) Filler.step (Filler.ts:21) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9022) Filler.step (Filler.ts:22) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9023) Filler.step (Filler.ts:23) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9024) Filler.step (Filler.ts:24) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9025) Filler.step (Filler.ts:25) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9026) Filler.step (Filler.ts:26) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9027) Filler.step (Filler.ts:27) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9028) Filler.step (Filler.ts:28) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9029) Filler.step (Filler.ts:29) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9030) Filler.step (Filler.ts:30) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9031) Filler.step (Filler.ts:31) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9032) Filler.step (Filler.ts:32) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9033) Filler.step (Filler.ts:33) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9034) Filler.step (Filler.ts:34) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9035) Filler.step (Filler.ts:35) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9036) Filler.step (Filler.ts:36) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9037) Filler.step (Filler.ts:37) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9038) Filler.step (Filler.ts:38) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9039) Filler.step (Filler.ts:39) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9040) Filler.step (Filler.ts:40) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9041) Filler.step (Filler.ts:41) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9042) Filler.step (Filler.ts:42) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9043) Filler.step (Filler.ts:43) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9044) Filler.step (Filler.ts:44) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9045) Filler.step (Filler.ts:45) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9046) Filler.step (Filler.ts:46) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9047) Filler.step (Filler.ts:47) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9048) Filler.step (Filler.ts:48) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9049) Filler.step (Filler.ts:49) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9050) Filler.step (Filler.ts:50) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9051) Filler.step (Filler.ts:51) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9052) Filler.step (Filler.ts:52) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9053) Filler.step (Filler.ts:53) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9054) Filler.step (Filler.ts:54) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9055) Filler.step (Filler.ts:55) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9056) Filler.step (Filler.ts:56) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9057) Filler.step (Filler.ts:57) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9058) Filler.step (Filler.ts:58) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+9059) Filler.step (Filler.ts:59) > argusBrowser.waitMs(10) // unrelated-later-snapshot-check
+
+895) Function.takeScreenshotAndCheckBaseline (SnapshotUtils.ts:103) > expect(305).toBeLessThanOrEqual(1000) (2ms)
+896) closeUsedInFormsPopup (DQE-T76.test.ts:78) > argusBrowser.click('[data-testid="DialogCloseButton"]') (70ms)
+
+PASS
+Total time: 45.2s
+
+------------------------------------------------------------------------------------------------------------------------
+
+9000) Filler.step (Filler.ts:0) > argusBrowser.waitMs(10) // afterEach-hook-lead-in
+9001) Filler.step (Filler.ts:1) > argusBrowser.waitMs(10) // afterEach-hook-lead-in
+9002) Filler.step (Filler.ts:2) > argusBrowser.waitMs(10) // afterEach-hook-lead-in
+9003) Filler.step (Filler.ts:3) > argusBrowser.waitMs(10) // afterEach-hook-lead-in
+9004) Filler.step (Filler.ts:4) > argusBrowser.waitMs(10) // afterEach-hook-lead-in
+9005) Filler.step (Filler.ts:5) > argusBrowser.waitMs(10) // afterEach-hook-lead-in
+9006) Filler.step (Filler.ts:6) > argusBrowser.waitMs(10) // afterEach-hook-lead-in
+9007) Filler.step (Filler.ts:7) > argusBrowser.waitMs(10) // afterEach-hook-lead-in
+9008) Filler.step (Filler.ts:8) > argusBrowser.waitMs(10) // afterEach-hook-lead-in
+9009) Filler.step (Filler.ts:9) > argusBrowser.waitMs(10) // afterEach-hook-lead-in
+9010) Filler.step (Filler.ts:10) > argusBrowser.waitMs(10) // afterEach-hook-lead-in
+9011) Filler.step (Filler.ts:11) > argusBrowser.waitMs(10) // afterEach-hook-lead-in
+9012) Filler.step (Filler.ts:12) > argusBrowser.waitMs(10) // afterEach-hook-lead-in
+9013) Filler.step (Filler.ts:13) > argusBrowser.waitMs(10) // afterEach-hook-lead-in
+9014) Filler.step (Filler.ts:14) > argusBrowser.waitMs(10) // afterEach-hook-lead-in
+9015) Filler.step (Filler.ts:15) > argusBrowser.waitMs(10) // afterEach-hook-lead-in
+9016) Filler.step (Filler.ts:16) > argusBrowser.waitMs(10) // afterEach-hook-lead-in
+9017) Filler.step (Filler.ts:17) > argusBrowser.waitMs(10) // afterEach-hook-lead-in
+9018) Filler.step (Filler.ts:18) > argusBrowser.waitMs(10) // afterEach-hook-lead-in
+9019) Filler.step (Filler.ts:19) > argusBrowser.waitMs(10) // afterEach-hook-lead-in
+
+FAIL afterEach
+
+Error: upstream connect error or disconnect/reset before headers. reset reason: connection timeout
+    at argusBrowser.open (<repoPath>/packages/digital-page-objects/src/utilities/BrowserUtils.ts:41:11)

@@ -1,0 +1,27 @@
+[INFO] Scanning for projects...
+[INFO] Building order-service 1.0.0
+[INFO] -------------------------------------------------------
+[INFO] T E S T S
+[INFO] -------------------------------------------------------
+Running com.example.orders.OrderServiceTest
+testCreateOrder(com.example.orders.OrderServiceTest)  Time elapsed: 0.045 s  <<< FAILURE!
+java.lang.AssertionError: expected:<CONFIRMED> but was:<PENDING>
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.failNotEquals(Assert.java:835)
+	at org.junit.Assert.assertEquals(Assert.java:120)
+	at com.example.orders.OrderServiceTest.testCreateOrder(OrderServiceTest.java:42)
+
+Tests run: 5, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 1.203 s - in com.example.orders.OrderServiceTest
+Running com.example.orders.InventoryServiceTest
+Tests run: 3, Failures: 0, Errors: 1, Skipped: 0, Time elapsed: 0.812 s - in com.example.orders.InventoryServiceTest
+Running com.example.orders.PricingServiceTest
+Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.301 s - in com.example.orders.PricingServiceTest
+
+[INFO] Results:
+[INFO]
+[ERROR] Failures:
+[ERROR]   OrderServiceTest.testCreateOrder:42 expected:<CONFIRMED> but was:<PENDING>
+[ERROR] Tests run: 12, Failures: 1, Errors: 1, Skipped: 0
+[INFO]
+[INFO] BUILD FAILURE
+[INFO] Total time:  8.412 s

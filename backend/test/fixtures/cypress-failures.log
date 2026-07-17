@@ -1,0 +1,15 @@
+Running:  dashboard.cy.ts
+
+  Dashboard
+    ✓ loads widgets (240ms)
+    ✗ should display revenue chart
+
+      AssertionError: Timed out retrying after 4000ms: expected '<div.chart>' to be 'visible'
+
+      at Context.eval (webpack://dashboard.cy.ts:18:10)
+
+  1 passing (1s)
+  1 failing
+
+  1) Dashboard should display revenue chart:
+     AssertionError: Timed out retrying after 4000ms: expected '<div.chart>' to be 'visible'

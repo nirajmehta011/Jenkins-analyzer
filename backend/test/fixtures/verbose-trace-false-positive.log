@@ -1,0 +1,22 @@
+
+------------------------------------------------------------------------------------------------------------------------
+Package: e2e-tests-digital
+Filename: <repoRoot>/src/tests/regression/newCommandCenter/reusableResourcesLibrary/DQE-T70_NewCC_ResourceLibraryUI.test.ts
+Test: New CC Validate Resource library screen visibility based on provision > New CC - Validate the menu link is visible/invisible based on provision / NewCC-DQE-T70
+Browser Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/143.0.0.0 Safari/537.36
+Requested size: 1920x1080. Actual: 1920x1080. (width x height) Pixel ratio: 1.
+------------------------------------------------------------------------------------------------------------------------
+
+1) initDigitalLogin (DQE-T70_NewCC_ResourceLibraryUI.test.ts:19) > argusBrowser.open('https://digital-cloud-qa-web.medallia.com') (1.8s)
+
+          console.error Failed to load resource: the server responded with a status of 401 ()
+
+2) NewCCSideNavBar.click (NewCCSideNavBar.ts:78) > argusBrowser.click('[data-testid="AppVerticalNavList"]') (100ms)
+3) NewCCSideNavBar.isVisible (NewCCSideNavBar.ts:79) > argusBrowser.isVisible('[data-testid="ResourcesLibrary"]') => 'false' (44ms)
+4) NewCCSideNavBar.toBe (NewCCSideNavBar.ts:81) > expect(false).toBe(false) (5ms)
+5) NewCCSideNavBar.toBe (NewCCSideNavBar.ts:76) > expect(true).toBe(true) (11ms)
+6) logOutUser (DQE-T70_NewCC_ResourceLibraryUI.test.ts:44) > argusBrowser.click('[data-testid="AccountActions"]') (102ms)
+
+PASS
+Total time: 1m 22.3s
+ArgusBrowser calls/second: 1.75 (higher is better)

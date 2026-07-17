@@ -23,6 +23,22 @@ export interface SymptomVsCause {
   cause: string;
 }
 
+export interface RelatedLink {
+  label: string;
+  url: string;
+}
+
+export interface EvidenceContext {
+  /** The 1-2 execution steps immediately before the failure — what the test was doing right before it broke. */
+  precedingSteps: string[];
+  expected: string | null;
+  received: string | null;
+  /** The page/URL the failure occurred on, when present in the log. */
+  pageUrl: string | null;
+  /** Duration of the failing step, when present (e.g. "1.1s", "30000ms"). */
+  duration: string | null;
+}
+
 export interface CascadingGroup {
   groupId: string;
   rootCause: string;
@@ -50,6 +66,11 @@ export interface TestCase {
   fixComplexity: FixComplexity | null;
   logEvidenceQuote: string | null;
   parserConfidence: Confidence;
+  testUserEmail: string | null;
+  relatedLinks: RelatedLink[];
+  attemptCount: number | null;
+  isHookFailure: boolean;
+  evidenceContext: EvidenceContext | null;
 }
 
 export interface BuildSummary {
@@ -95,11 +116,6 @@ export interface AnalysisOptions {
   enableSeverity: boolean;
   enableFlaky: boolean;
   enableDiff: boolean;
-}
-
-export interface ChunkContext {
-  seenSuites: string[];
-  prevFailCount: number;
 }
 
 export interface SSEProgressEvent {

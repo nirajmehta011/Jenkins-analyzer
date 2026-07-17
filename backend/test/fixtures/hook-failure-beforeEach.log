@@ -1,0 +1,13 @@
+
+------------------------------------------------------------------------------------------------------------------------
+Package: e2e-tests-digital
+Filename: <repoRoot>/src/tests/regression/newCommandCenter/userBehavior/beforeEach.ts
+Browser Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/143.0.0.0 Safari/537.36
+------------------------------------------------------------------------------------------------------------------------
+
+1) initDigitalLogin (DigitalTestBase.ts:99) > argusBrowser.open('https://digital-cloud-qa-web.example.com') (30.1s)
+
+FAIL beforeEach
+
+Error: upstream connect error or disconnect/reset before headers. reset reason: connection timeout
+    at argusBrowser.open (<repoPath>/packages/digital-page-objects/src/utilities/BrowserUtils.ts:41:11)

@@ -1,0 +1,84 @@
+
+------------------------------------------------------------------------------------------------------------------------
+Package: e2e-tests-digital
+Test: New CC Validate the new UI of Resource Library screen > New CC - Validate the new UI of Resource Library screen / NewCC-DQE-T71
+------------------------------------------------------------------------------------------------------------------------
+
+Note: the HTTP client is configured with an automatic retry policy for transient network errors (unrelated to this test's own outcome).
+
+617) Function.takeScreenshotAndCheckBaseline (SnapshotUtils.ts:103) > Function.toBeLessThanOrEqual (SnapshotUtils.ts:76) > expect(1475).toBeLessThanOrEqual(1000) (1.1s)
+
+FAIL New CC - Validate the new UI of Resource Library screen / NewCC-DQE-T71
+
+Expected: <= 1000
+Received:    1475
+
+------------------------------------------------------------------------------------------------------------------------
+
+9000) Filler.step (Filler.ts:0) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9001) Filler.step (Filler.ts:1) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9002) Filler.step (Filler.ts:2) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9003) Filler.step (Filler.ts:3) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9004) Filler.step (Filler.ts:4) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9005) Filler.step (Filler.ts:5) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9006) Filler.step (Filler.ts:6) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9007) Filler.step (Filler.ts:7) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9008) Filler.step (Filler.ts:8) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9009) Filler.step (Filler.ts:9) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9010) Filler.step (Filler.ts:10) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9011) Filler.step (Filler.ts:11) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9012) Filler.step (Filler.ts:12) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9013) Filler.step (Filler.ts:13) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9014) Filler.step (Filler.ts:14) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9015) Filler.step (Filler.ts:15) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9016) Filler.step (Filler.ts:16) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9017) Filler.step (Filler.ts:17) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9018) Filler.step (Filler.ts:18) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9019) Filler.step (Filler.ts:19) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9020) Filler.step (Filler.ts:20) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9021) Filler.step (Filler.ts:21) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9022) Filler.step (Filler.ts:22) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9023) Filler.step (Filler.ts:23) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9024) Filler.step (Filler.ts:24) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9025) Filler.step (Filler.ts:25) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9026) Filler.step (Filler.ts:26) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9027) Filler.step (Filler.ts:27) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9028) Filler.step (Filler.ts:28) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9029) Filler.step (Filler.ts:29) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9030) Filler.step (Filler.ts:30) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9031) Filler.step (Filler.ts:31) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9032) Filler.step (Filler.ts:32) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9033) Filler.step (Filler.ts:33) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9034) Filler.step (Filler.ts:34) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9035) Filler.step (Filler.ts:35) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9036) Filler.step (Filler.ts:36) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9037) Filler.step (Filler.ts:37) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9038) Filler.step (Filler.ts:38) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9039) Filler.step (Filler.ts:39) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9040) Filler.step (Filler.ts:40) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9041) Filler.step (Filler.ts:41) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9042) Filler.step (Filler.ts:42) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9043) Filler.step (Filler.ts:43) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9044) Filler.step (Filler.ts:44) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9045) Filler.step (Filler.ts:45) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9046) Filler.step (Filler.ts:46) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9047) Filler.step (Filler.ts:47) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9048) Filler.step (Filler.ts:48) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9049) Filler.step (Filler.ts:49) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9050) Filler.step (Filler.ts:50) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9051) Filler.step (Filler.ts:51) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9052) Filler.step (Filler.ts:52) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9053) Filler.step (Filler.ts:53) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9054) Filler.step (Filler.ts:54) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9055) Filler.step (Filler.ts:55) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9056) Filler.step (Filler.ts:56) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9057) Filler.step (Filler.ts:57) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9058) Filler.step (Filler.ts:58) > argusBrowser.waitMs(10) // attempt-2-lead-in
+9059) Filler.step (Filler.ts:59) > argusBrowser.waitMs(10) // attempt-2-lead-in
+
+617) Function.takeScreenshotAndCheckBaseline (SnapshotUtils.ts:103) > Function.toBeLessThanOrEqual (SnapshotUtils.ts:76) > expect(1475).toBeLessThanOrEqual(1000) (1.1s)
+
+FAIL New CC - Validate the new UI of Resource Library screen / NewCC-DQE-T71
+
+Expected: <= 1000
+Received:    1475

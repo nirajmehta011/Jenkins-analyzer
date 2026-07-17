@@ -1,0 +1,11 @@
+[INFO] Scanning for projects...
+[INFO] -------------------------------------------------------
+[INFO] T E S T S
+[INFO] -------------------------------------------------------
+Running com.example.orders.OrderServiceTest
+Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.203 s - in com.example.orders.OrderServiceTest
+Running com.example.orders.PricingServiceTest
+Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.301 s - in com.example.orders.PricingServiceTest
+
+[INFO] BUILD SUCCESS
+[INFO] Total time:  3.102 s

@@ -1,0 +1,28 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.4, pytest-7.4.0
+collected 4 items
+
+tests/test_auth.py::test_login PASSED                                   [ 25%]
+tests/test_auth.py::test_logout FAILED                                  [ 50%]
+tests/test_payments.py::test_charge_card FAILED                         [ 75%]
+tests/test_payments.py::test_refund PASSED                              [100%]
+
+=================================== FAILURES ===================================
+___________________________________ test_logout __________________________________
+
+    def test_logout():
+>       assert session.is_active() is False
+E       AssertionError: assert True is False
+
+tests/test_auth.py:18: AssertionError
+___________________________________ test_charge_card ______________________________
+
+    def test_charge_card():
+>       response = client.post("/charge", timeout=2)
+E       requests.exceptions.ConnectionError: ECONNREFUSED
+
+tests/test_payments.py:33: ConnectionError
+
+FAILED tests/test_auth.py::test_logout - AssertionError: assert True is False
+FAILED tests/test_payments.py::test_charge_card - ConnectionError: ECONNREFUSED
+========================= 2 failed, 2 passed in 1.14s ===========================

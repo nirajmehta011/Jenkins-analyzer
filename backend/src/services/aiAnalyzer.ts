@@ -1,143 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import OpenAI from 'openai';
-import type {
-  ProjectConfig,
-  AnalysisOptions,
-  AnalysisResult,
-  ChunkContext,
-  AIProviderConfig,
-} from '../types/analysis';
-
-const ANALYSIS_RESULT_SCHEMA = `{
-  "cases": [
-    {
-      "id": "string (temporary, will be reassigned)",
-      "name": "string (test method name)",
-      "suite": "string | null (test class / module)",
-      "status": "PASSED | FAILED | ERROR | SKIPPED",
-      "duration": "string | null (e.g. '1.23s')",
-      "isFlaky": "boolean",
-      "isCascading": "boolean",
-      "cascadeGroupId": "string | null",
-      "exceptionType": "string | null (e.g. 'java.lang.NullPointerException')",
-      "errorMessage": "string | null",
-      "stackFrames": ["string (one per frame, max 10)"],
-      "rootCause": "string | null",
-      "symptomVsCause": { "symptom": "string", "cause": "string" } | null,
-      "severity": "CRITICAL | HIGH | MEDIUM | LOW | null",
-      "category": "NullPointerException | AssertionError | Timeout | ConnectionError | ConfigError | DependencyError | SetupFailure | DataError | EnvironmentError | RaceCondition | AuthError | NetworkError | Unknown | null",
-      "fixSuggestion": "string | null",
-      "fixComplexity": "LOW | MEDIUM | HIGH | null",
-      "logEvidenceQuote": "string | null (exact line from log)",
-      "parserConfidence": "HIGH | MEDIUM | LOW"
-    }
-  ],
-  "cascadingGroups": [
-    {
-      "groupId": "string",
-      "rootCause": "string",
-      "affectedTestIds": ["string"],
-      "fixOnce": true
-    }
-  ],
-  "buildSummary": {
-    "overallStatus": "string (e.g. 'BUILD FAILURE')",
-    "buildDuration": "string | null",
-    "jdkVersion": "string | null",
-    "buildTool": "string | null (Maven / Gradle / npm)",
-    "topFailureCategories": [{ "category": "string", "count": 0 }],
-    "recommendedFirstFix": "string | null",
-    "estimatedFixComplexity": "LOW | MEDIUM | HIGH | null"
-  }
-}`;
-
-export function buildSystemPrompt(
-  config: ProjectConfig,
-  options: AnalysisOptions
-): string {
-  const optionsList: string[] = [];
-  if (options.enableRootCause) optionsList.push('root cause analysis');
-  if (options.enableFixSuggestion) optionsList.push('fix suggestions');
-  if (options.enableGrouping) optionsList.push('cascading failure grouping');
-  if (options.enableSeverity) optionsList.push('severity classification');
-  if (options.enableFlaky) optionsList.push('flaky test detection');
-
-  return `You are an expert CI/CD forensics agent with deep knowledge of Jenkins,
-JUnit, TestNG, pytest, Surefire, Maven, Gradle, Spring Boot, Playwright, Cypress, Selenium,
-and common CI failure patterns.
-
-Project context:
-- Project type: ${config.projectType}
-- Test framework: ${config.testFramework}
-- Environment: ${config.environment}
-- Known flaky tests: ${config.knownFlaky || 'none specified'}
-
-Enabled analyses: ${optionsList.join(', ') || 'all'}
-
-Your job: analyze Jenkins build logs with surgical precision and return
-structured JSON only — no prose, no markdown, no backticks.
-
-CRITICAL RULES:
-1. Always distinguish SYMPTOM (what the error says) from CAUSE (why it happened).
-   NullPointerException is never a root cause — dig deeper.
-2. Identify CASCADING failures: one broken @BeforeAll can fail 30 tests.
-   Group them under a cascadeGroupId. One fix should unblock all.
-3. Mark FLAKY tests: timeouts, race conditions, ConcurrentModificationException,
-   port-in-use, resource contention — these need stabilization, not bug fixes.
-4. If you cannot determine root cause from log data, set rootCause to:
-   'Insufficient log data — enable verbose logging with -X flag'
-   Never guess. Confidence must reflect certainty.
-5. Quote the exact log line that led to each conclusion in logEvidenceQuote.
-6. Return ONLY the JSON object matching the schema. No other text.`;
-}
-
-export function buildUserPrompt(
-  chunk: string,
-  chunkIndex: number,
-  totalChunks: number,
-  seenSuites: string[],
-  prevFailCount: number,
-  isLast: boolean
-): string {
-  let prompt = `Analyze this Jenkins build log chunk (${chunkIndex + 1} of ${totalChunks}).
-
-`;
-
-  if (chunkIndex > 0) {
-    prompt += `CONTINUITY CONTEXT:
-- Previously analyzed suites: ${seenSuites.join(', ') || 'none yet'}
-- Failures found so far: ${prevFailCount}
-- Do NOT re-report tests from previous chunks unless you have new information.
-
-`;
-  }
-
-  if (isLast) {
-    prompt += `This is the FINAL chunk. Include a complete buildSummary with:
-- overallStatus (BUILD SUCCESS / BUILD FAILURE / UNSTABLE)
-- buildDuration, jdkVersion, buildTool (if detectable)
-- topFailureCategories (aggregate across ALL chunks, top 5)
-- recommendedFirstFix (the single highest-impact fix)
-- estimatedFixComplexity
-
-`;
-  } else {
-    prompt += `This is NOT the final chunk. Set buildSummary to null.
-Focus on extracting all test cases from this chunk.
-
-`;
-  }
-
-  prompt += `Return JSON matching this schema exactly:
-${ANALYSIS_RESULT_SCHEMA}
-
-===== LOG CHUNK START =====
-${chunk}
-===== LOG CHUNK END =====`;
-
-  return prompt;
-}
+import type { AIProviderConfig } from '../types/analysis';
 
 function resolveAIConfig(clientConfig?: AIProviderConfig): AIProviderConfig {
   if (clientConfig && clientConfig.apiKey) {
@@ -208,10 +72,18 @@ function getDefaultModelForProvider(provider: string): string {
   }
 }
 
+/**
+ * Single-call, provider-agnostic AI request. This is the only AI entry point
+ * in the app — the local parser (localParser.ts) does all failure detection,
+ * classification, and root-cause analysis with zero AI calls; callAI is used
+ * exclusively for the optional, user-triggered "fix suggestions" batches
+ * (see fixSuggester.ts) and the connection/model-list test endpoints.
+ */
 export async function callAI(
   clientConfig: AIProviderConfig | undefined,
   systemPrompt: string,
-  messages: { role: 'user' | 'assistant'; content: string }[]
+  messages: { role: 'user' | 'assistant'; content: string }[],
+  maxTokens = 4000
 ): Promise<string> {
   const config = resolveAIConfig(clientConfig);
 
@@ -226,7 +98,7 @@ export async function callAI(
       const anthropic = new Anthropic({ apiKey: config.apiKey });
       const response = await anthropic.messages.create({
         model: modelName,
-        max_tokens: 4000,
+        max_tokens: maxTokens,
         system: systemPrompt,
         messages: messages.map((m) => ({ role: m.role, content: m.content })),
       });
@@ -244,6 +116,7 @@ export async function callAI(
         systemInstruction: systemPrompt,
         generationConfig: {
           responseMimeType: 'application/json',
+          maxOutputTokens: maxTokens,
         },
       });
 
@@ -289,6 +162,7 @@ export async function callAI(
       const options: any = {
         model: modelName,
         messages: reqMessages,
+        max_tokens: maxTokens,
       };
 
       if (config.provider === 'openai' || config.provider === 'groq') {
@@ -306,86 +180,4 @@ export async function callAI(
     default:
       throw new Error(`Unsupported AI provider: ${config.provider}`);
   }
-}
-
-export async function analyzeChunk(
-  chunk: string,
-  chunkIndex: number,
-  totalChunks: number,
-  config: ProjectConfig,
-  options: AnalysisOptions,
-  context: ChunkContext,
-  aiConfig?: AIProviderConfig
-): Promise<Partial<AnalysisResult>> {
-  const systemPrompt = buildSystemPrompt(config, options);
-  const userPrompt = buildUserPrompt(
-    chunk,
-    chunkIndex,
-    totalChunks,
-    context.seenSuites,
-    context.prevFailCount,
-    chunkIndex === totalChunks - 1
-  );
-
-  let responseText: string;
-
-  try {
-    responseText = await callAI(aiConfig, systemPrompt, [{ role: 'user', content: userPrompt }]);
-  } catch (apiError) {
-    const errMsg = apiError instanceof Error ? apiError.message : 'Unknown API error';
-    throw new Error(`AI API error on chunk ${chunkIndex + 1}: ${errMsg}`);
-  }
-
-  // Try to parse JSON response
-  let parsed: Partial<AnalysisResult>;
-  try {
-    parsed = parseJsonResponse(responseText);
-  } catch {
-    // Retry once with explicit JSON instruction
-    try {
-      const retryResponseText = await callAI(aiConfig, systemPrompt, [
-        { role: 'user', content: userPrompt },
-        { role: 'assistant', content: responseText },
-        {
-          role: 'user',
-          content:
-            'Your response was not valid JSON. Return ONLY raw JSON matching the schema — no backticks, no markdown, no explanation.',
-        },
-      ]);
-      parsed = parseJsonResponse(retryResponseText);
-    } catch (retryError) {
-      const errMsg =
-        retryError instanceof Error ? retryError.message : 'JSON parse failed';
-      throw new Error(
-        `Failed to parse AI response for chunk ${chunkIndex + 1}: ${errMsg}`
-      );
-    }
-  }
-
-  return parsed;
-}
-
-
-/**
- * Parse JSON from AI response text, stripping accidental markdown formatting.
- */
-function parseJsonResponse(text: string): Partial<AnalysisResult> {
-  let cleaned = text.trim();
-
-  // Strip markdown code fences if present
-  if (cleaned.startsWith('```')) {
-    cleaned = cleaned.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
-  }
-
-  // Find the JSON object boundaries
-  const firstBrace = cleaned.indexOf('{');
-  const lastBrace = cleaned.lastIndexOf('}');
-
-  if (firstBrace === -1 || lastBrace === -1) {
-    throw new Error('No JSON object found in response');
-  }
-
-  cleaned = cleaned.slice(firstBrace, lastBrace + 1);
-
-  return JSON.parse(cleaned) as Partial<AnalysisResult>;
 }

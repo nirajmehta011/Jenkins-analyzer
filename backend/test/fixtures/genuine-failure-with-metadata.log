@@ -1,0 +1,22 @@
+
+------------------------------------------------------------------------------------------------------------------------
+Package: e2e-tests-digital
+Filename: <repoRoot>/src/tests/regression/newCommandCenter/reusableResourcesLibrary/DQE-T170_NewCC_ChtmlAndCssFromResourceLibEffectOnEmbeddedForm.test.ts
+Test: New CC E2E Validate Resource Files Effect On Embedded Form > New CC - E2E Validate changes should be visible based on resource applied in Embedded Form Onsite and Preview / NewCC-DQE-T170
+Browser Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/143.0.0.0 Safari/537.36
+------------------------------------------------------------------------------------------------------------------------
+
+1) Login (LoginPage.ts:12) > argusBrowser.open('https://digital-cloud-qa-web.example.com') as automation_user_6@example.com (1.8s)
+
+617) Function.takeScreenshotAndCheckBaseline (SnapshotUtils.ts:103) > expect(4799).toBeLessThanOrEqual(1000) (1.1s)
+
+FAIL New CC - E2E Validate changes should be visible based on resource applied in Embedded Form Onsite and Preview / NewCC-DQE-T170
+
+expect(received).toBeLessThanOrEqual(expected)
+
+Expected: <= 1000
+Received:    4799
+    at Function.toBeLessThanOrEqual (<repoPath>/packages/digital-page-objects/src/utilities/SnapshotUtils.ts:76:26)
+
+    Screenshot: https://jenkins.example.com/job/digital/artifact/logs/argus/DQE-T170-FAILURE.png
+    HTML Source: https://jenkins.example.com/job/digital/artifact/logs/argus/DQE-T170-FAILURE.html

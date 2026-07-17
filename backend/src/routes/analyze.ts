@@ -4,7 +4,8 @@ import JSZip from 'jszip';
 import fs from 'fs';
 import os from 'os';
 import { preprocessLog, extractSurefireXml } from '../services/chunker';
-import { parseLogsLocally } from '../services/localParser';
+import { parseLogsLocally, parseLogFile } from '../services/localParser';
+import { ZipSizeTracker, getDeclaredUncompressedSize } from '../services/zipGuard';
 import { getFixSuggestions } from '../services/fixSuggester';
 import { callAI } from '../services/aiAnalyzer';
 import type {
@@ -250,6 +251,7 @@ router.post('/', upload.single('file'), async (req: Request, res: Response): Pro
       sendSSE({ stage: 'preprocessing', pct: 10, message: 'Processing ZIP archive contents...' });
       const zipBuffer = await fs.promises.readFile(req.file.path);
       const zip = await JSZip.loadAsync(zipBuffer);
+      const zipSizeTracker = new ZipSizeTracker();
 
       // Find files ending with 'log.txt'
       const logEntries = Object.entries(zip.files).filter(
@@ -259,18 +261,13 @@ router.post('/', upload.single('file'), async (req: Request, res: Response): Pro
       if (logEntries.length === 0) {
         // Fallback: extract any text/log files
         sendSSE({ stage: 'preprocessing', pct: 12, message: 'No log.txt files found. Extracting standard logs...' });
-        const fallbackText = await extractZipContents(zipBuffer);
+        const fallbackText = await extractZipContents(zipBuffer, zipSizeTracker);
         fullText = fallbackText;
         const cleaned = preprocessLog(fallbackText);
 
-        // Check for failures
-        if (!cleaned.toLowerCase().includes('fail ')) {
-          const result: AnalysisResult = createEmptySuccessResult(filename);
-          sendSSE({ stage: 'done', pct: 100, message: 'Analysis complete (All tests passed)', result });
-          res.end();
-          return;
-        }
-
+        // Always hand off to the real parser rather than gating on a content
+        // substring — the shared pipeline below correctly reports BUILD
+        // SUCCESS if parsing genuinely finds no failures.
         logFiles.set('combined-fallback.log', cleaned);
       } else {
         // Process log.txt files
@@ -278,20 +275,40 @@ router.post('/', upload.single('file'), async (req: Request, res: Response): Pro
 
         let processed = 0;
         for (const [path, file] of logEntries) {
+          // Preflight check against the declared uncompressed size, then a
+          // post-decompression check as a safety net — both throw
+          // ZipBombError, which is intentionally NOT caught by the
+          // "skip unreadable files" catch below so it aborts the whole
+          // request via the route's outer error handler.
+          zipSizeTracker.checkDeclared(path, getDeclaredUncompressedSize(file));
+
+          let content: string;
           try {
-            const content = await file.async('text');
+            content = await file.async('text');
+          } catch {
+            // Skip unreadable/corrupt files
+            continue;
+          }
+          zipSizeTracker.checkActual(path, content.length);
+
+          try {
             fullText += `\n=== FILE: ${path} ===\n${content}\n`;
 
-            // Determine if this is a failed test
-            let isFailed = false;
+            // Determine if this is a failed test. A custom query list (user-
+            // pasted failed-test names) is trusted directly; otherwise defer
+            // to the actual parser rather than a brittle content substring
+            // check — "failed", "FAIL:", "Failures: N" etc. don't contain
+            // the literal "fail " (fail + space) the old check required.
+            const preprocessed = preprocessLog(content);
+            let isFailed: boolean;
             if (hasCustomQueries) {
               isFailed = isLogFileMatchingQueries(path, content, customQueries);
             } else {
-              isFailed = content.toLowerCase().includes('fail ');
+              isFailed = parseLogFile(preprocessed, path).length > 0;
             }
 
             if (isFailed) {
-              logFiles.set(path, preprocessLog(content));
+              logFiles.set(path, preprocessed);
             } else {
               // Register as PASSED locally
               const { suite, name } = parseNamesFromPath(path);
@@ -343,17 +360,11 @@ router.post('/', upload.single('file'), async (req: Request, res: Response): Pro
         });
       }
     } else {
-      // Single log file
+      // Single log file — always run it through the parser rather than
+      // gating on a content substring; let actual parsed evidence decide
+      // pass/fail.
       const rawContent = await fs.promises.readFile(req.file.path, 'utf-8');
       fullText = rawContent;
-
-      if (!rawContent.toLowerCase().includes('fail ') && !hasCustomQueries) {
-        const result: AnalysisResult = createEmptySuccessResult(filename);
-        sendSSE({ stage: 'done', pct: 100, message: 'Analysis complete (No failures found)', result });
-        res.end();
-        return;
-      }
-
       logFiles.set(filename, preprocessLog(rawContent));
     }
 
@@ -416,7 +427,11 @@ router.post('/', upload.single('file'), async (req: Request, res: Response): Pro
       }
     }
 
-    sendSSE({ stage: 'done', pct: 100, message: 'Local analysis complete — click "Get AI Fix Suggestions" for AI-powered fixes', result });
+    const doneMessage = (result.summary.failed + result.summary.errors) === 0
+      ? `Analysis complete — all ${result.summary.total} test(s) passed`
+      : 'Local analysis complete — click "Get AI Fix Suggestions" for AI-powered fixes';
+
+    sendSSE({ stage: 'done', pct: 100, message: doneMessage, result });
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : 'Unknown server error';
     sendSSE({ stage: 'error', pct: 0, error: errMsg });
@@ -512,7 +527,7 @@ router.post('/fix-suggestions', async (req: Request, res: Response): Promise<voi
 /**
  * Extract all text files from a ZIP archive and concatenate them.
  */
-async function extractZipContents(buffer: Buffer): Promise<string> {
+async function extractZipContents(buffer: Buffer, zipSizeTracker: ZipSizeTracker): Promise<string> {
   const zip = await JSZip.loadAsync(buffer);
   const textParts: string[] = [];
 
@@ -525,12 +540,19 @@ async function extractZipContents(buffer: Buffer): Promise<string> {
     const hasNoExtension = !path.includes('.') || path.endsWith('/');
 
     if (isTextFile || hasNoExtension) {
+      // Preflight + post-decompression size checks — ZipBombError
+      // intentionally bypasses the "skip binary files" catch below.
+      zipSizeTracker.checkDeclared(path, getDeclaredUncompressedSize(file));
+
+      let content: string;
       try {
-        const content = await file.async('text');
-        textParts.push(`\n=== FILE: ${path} ===\n${content}`);
+        content = await file.async('text');
       } catch {
         // Skip binary files
+        continue;
       }
+      zipSizeTracker.checkActual(path, content.length);
+      textParts.push(`\n=== FILE: ${path} ===\n${content}`);
     }
   }
 
@@ -589,6 +611,11 @@ function createPassedCase(name: string, suite: string, index: number): TestCase 
     fixComplexity: null,
     logEvidenceQuote: null,
     parserConfidence: 'HIGH',
+    testUserEmail: null,
+    relatedLinks: [],
+    attemptCount: null,
+    isHookFailure: false,
+    evidenceContext: null,
   };
 }
 

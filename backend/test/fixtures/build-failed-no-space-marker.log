@@ -1,0 +1,9 @@
+[INFO] Scanning for projects...
+[INFO] -------------------------------------------------------
+[INFO] T E S T S
+[INFO] -------------------------------------------------------
+Running com.example.billing.InvoiceServiceTest
+Tests run: 6, Failures: 2, Errors: 0, Skipped: 0, Time elapsed: 2.114 s - in com.example.billing.InvoiceServiceTest
+
+[INFO] BUILD FAILURE
+[INFO] Total time:  4.881 s

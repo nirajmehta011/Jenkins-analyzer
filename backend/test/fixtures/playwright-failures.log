@@ -1,0 +1,24 @@
+Running 3 tests using 1 worker
+
+  1) [chromium] › tests/login.spec.ts:12:5 › Login flow › should show error on bad password
+
+    Error: expect(received).toBe(expected)
+
+    Expected: "Invalid credentials"
+    Received: ""
+
+    Timeout 30000ms exceeded while waiting for selector "[data-test=error-banner]"
+
+      at tests/login.spec.ts:20:32
+
+  2) [chromium] › tests/checkout.spec.ts:8:5 › Checkout › should complete purchase
+
+    TimeoutError: locator.click: Timeout 30000ms exceeded.
+    waiting for selector "[data-test=submit-order]"
+
+      at tests/checkout.spec.ts:15:10
+
+  2 failed
+    [chromium] › tests/login.spec.ts:12:5 › Login flow › should show error on bad password
+    [chromium] › tests/checkout.spec.ts:8:5 › Checkout › should complete purchase
+  1 passed (18s)
