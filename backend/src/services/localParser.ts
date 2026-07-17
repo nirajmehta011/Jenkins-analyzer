@@ -232,9 +232,12 @@ function buildEvidenceContext(lines: string[], index: number): EvidenceContext {
   const durationMatch = lines[index]?.match(/\((\d+(?:\.\d+)?\s*(?:ms|s|m))\)\s*$/i);
 
   // The nearest numbered execution-step lines before this one — the
-  // actions that led up to the failure, not the failure itself.
+  // actions that led up to the failure, not the failure itself. Captures
+  // more candidates over a wider window than display needs; consumers
+  // (e.g. repro-step generation) filter this down to the genuinely
+  // meaningful user-facing actions and discard framework-internal noise.
   const precedingSteps: string[] = [];
-  for (let j = index - 1; j >= Math.max(0, index - 15) && precedingSteps.length < 2; j--) {
+  for (let j = index - 1; j >= Math.max(0, index - 60) && precedingSteps.length < 8; j--) {
     const l = lines[j].trim();
     if (!l || isNoiseLine(l)) continue;
     if (NUMBERED_STEP_LINE.test(l)) {

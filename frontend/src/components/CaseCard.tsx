@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { TestCase } from '../types/analysis';
+import CreateTicketModal from './CreateTicketModal';
 
 interface CaseCardProps {
   testCase: TestCase;
@@ -34,6 +35,7 @@ const COMPLEXITY_STYLES: Record<string, string> = {
 export default function CaseCard({ testCase: tc }: CaseCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['error', 'rootCause', 'evidence']));
+  const [showTicketModal, setShowTicketModal] = useState(false);
 
   const statusStyle = STATUS_STYLES[tc.status] || STATUS_STYLES.FAILED;
 
@@ -283,6 +285,17 @@ export default function CaseCard({ testCase: tc }: CaseCardProps) {
             </div>
           ) : null}
 
+          {/* Create ticket */}
+          {(tc.status === 'FAILED' || tc.status === 'ERROR') && (
+            <button
+              onClick={() => setShowTicketModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-200
+                       bg-slate-700 hover:bg-slate-600 transition-colors border border-slate-600"
+            >
+              📋 Create Ticket
+            </button>
+          )}
+
           {/* Log evidence */}
           {(tc.logEvidenceQuote || tc.evidenceContext) && (
             <CollapsibleSection
@@ -372,6 +385,10 @@ export default function CaseCard({ testCase: tc }: CaseCardProps) {
             <span className="text-xs text-slate-600 font-mono">{tc.id}</span>
           </div>
         </div>
+      )}
+
+      {showTicketModal && (
+        <CreateTicketModal testCase={tc} onClose={() => setShowTicketModal(false)} />
       )}
     </div>
   );
