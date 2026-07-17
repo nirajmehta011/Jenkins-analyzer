@@ -30,8 +30,27 @@ Frontend runs at **http://localhost:5173**, backend at **http://localhost:3001**
 3. **Analyze** — Click "Analyze Build Log" and watch real-time progress; parsing happens locally, in seconds
 4. **Explore** — Filter by status, category, severity; search test cases
 5. **(Optional) Get AI Fix Suggestions** — Enter an API key for any supported provider to get actionable fix suggestions for the failures found
-6. **Export** — Download results as JSON, CSV, or Markdown report
-7. **Compare** — Upload a previous analysis JSON to diff against
+6. **Re-run in Jenkins** — Check off failed cases and click "Re-run in Jenkins" to open a pre-filled build form for your Jenkins job in a new tab (configure your Jenkins base URL + job path once; see below)
+7. **Export** — Download results as JSON, CSV, or Markdown report
+8. **Compare** — Upload a previous analysis JSON to diff against
+
+## Jenkins Re-run Setup
+
+To use the "Re-run in Jenkins" button, click **Configure Jenkins** (shown in the floating action bar once you select at least one failed case) and enter:
+
+| Field | Description | Example |
+|-------|-------------|---------|
+| Jenkins Base URL | The root URL of your Jenkins instance, no trailing slash | `https://jenkins.mycompany.com` |
+| Job Path | The full job path segment **exactly as it appears in your job's own Jenkins URL**, including the leading `job/` | `job/digital-ui-automation` |
+
+For a job nested in folders, Jenkins repeats `job/` per folder level — enter it the same way, e.g. `job/team-folder/job/digital-ui-automation`.
+
+This generates a build URL like:
+```
+https://jenkins.mycompany.com/job/digital-ui-automation/build?MULTIPLE_GROUPS=NewCC-DQE-T170,NM-T5450
+```
+
+Selected test IDs are extracted by taking the last `/`-separated segment of each test's name (e.g. `"New CC - E2E ... / NewCC-DQE-T170"` → `NewCC-DQE-T170`), then joined into the job's `MULTIPLE_GROUPS` parameter. Clicking the button opens the pre-filled build form in a new tab — it does **not** trigger the build automatically; you still click Build yourself. Config is saved to `localStorage`, same as the GitHub/Jira ticket-creation settings.
 
 ## Supported Log Formats
 
@@ -59,6 +78,7 @@ Frontend runs at **http://localhost:5173**, backend at **http://localhost:3001**
 │                    ↓                                        │
 │  SummaryCards → FilterBar → CaseList → CaseCard             │
 │  TrendChart → DiffView → ExportBar → History                │
+│  CaseCard (select) → JenkinsActionBar → JenkinsConfigPanel   │
 │                                                             │
 │  Vite dev server (:5173) ──proxy──→ /api                    │
 └────────────────────┬────────────────────────────────────────┘
@@ -111,6 +131,7 @@ This approach handles logs from 10 KB to 100 MB without ever calling an AI model
 - **📊 Category Breakdown** — Visual chart of failure categories with click-to-filter
 - **📋 Diff Mode** — Compare current vs previous build to isolate new failures
 - **🤖 Optional AI Fix Suggestions** — Batched, on-demand LLM calls for actionable fixes; never required, never automatic
+- **🚀 Re-run in Jenkins** — Check off failed cases and open a pre-filled Jenkins parameterized-build form in a new tab, ready for a human to click Build; never triggers a build automatically
 - **💾 Export** — Download as JSON, CSV, or comprehensive Markdown report, including all of the above evidence fields
 - **📜 History** — Last 10 analyses saved locally for instant recall
 
