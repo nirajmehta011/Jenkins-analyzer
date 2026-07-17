@@ -23,6 +23,9 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# Test fixtures are intentionally-committed sample logs, not runtime logs
+!backend/test/fixtures/**/*.log
+
 # Editor/System files
 .DS_Store
 .vscode/

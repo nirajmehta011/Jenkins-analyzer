@@ -1,11 +1,13 @@
 # Jenkins Log Analyzer 🔬
 
-An AI-powered web application that analyzes Jenkins build logs with surgical precision, identifying root causes, cascading failures, flaky tests, and providing actionable fix suggestions. Upload your CI/CD logs and get a comprehensive forensic analysis in seconds.
+A local-first web application that analyzes Jenkins build logs with surgical precision — identifying root causes, cascading failures, and flaky tests entirely offline. Upload your CI/CD logs and get a forensic analysis in seconds, no AI or internet connection required. An optional, user-triggered AI step can generate actionable fix suggestions on top of that analysis.
+
+For a step-by-step guide to running this on your own machine, see [LOCAL_SETUP.md](LOCAL_SETUP.md).
 
 ## Prerequisites
 
 - **Node.js 18+** (LTS recommended)
-- **Anthropic API Key** — get one at [console.anthropic.com](https://console.anthropic.com)
+- Nothing else. No API key, no account, no internet connection needed for log analysis itself.
 
 ## Quick Start
 
@@ -15,11 +17,7 @@ git clone <your-repo-url>
 cd jenkins-analyzer
 npm run install:all
 
-# 2. Configure backend
-cp backend/.env.example backend/.env
-# Edit backend/.env and add your ANTHROPIC_API_KEY
-
-# 3. Start development servers
+# 2. Start development servers
 npm run dev
 ```
 
@@ -28,93 +26,116 @@ Frontend runs at **http://localhost:5173**, backend at **http://localhost:3001**
 ## How to Use
 
 1. **Upload** — Drag & drop your Jenkins console log (.log, .txt, .zip, .gz)
-2. **Configure** — Select project type, test framework, and analysis options
-3. **Analyze** — Click "Analyze Build Log" and watch real-time progress
+2. **Configure** — Select project type and test framework (used to tailor optional AI fix suggestions)
+3. **Analyze** — Click "Analyze Build Log" and watch real-time progress; parsing happens locally, in seconds
 4. **Explore** — Filter by status, category, severity; search test cases
-5. **Export** — Download results as JSON, CSV, or Markdown report
-6. **Compare** — Upload a previous analysis JSON to diff against
+5. **(Optional) Get AI Fix Suggestions** — Enter an API key for any supported provider to get actionable fix suggestions for the failures found
+6. **Export** — Download results as JSON, CSV, or Markdown report
+7. **Compare** — Upload a previous analysis JSON to diff against
 
 ## Supported Log Formats
 
 | Format | Description |
 |--------|-------------|
 | Jenkins Console Output | Raw console log from any Jenkins build |
-| Maven Surefire Reports | Embedded XML test results (auto-detected) |
-| pytest Output | Python test session output with markers |
-| JUnit XML | Standard JUnit XML format in log or ZIP |
-| ZIP Archives | Multi-file archives with mixed log types |
+| Maven Surefire Output | Both plain-text (`Tests run: N, Failures: N`, `<<< FAILURE!`) and embedded XML |
+| pytest Output | Python test session output (`FAILED`/`PASSED` markers) |
+| Jest | `●` failure markers and suite summaries |
+| Playwright | Numbered failure blocks and timeout traces |
+| Go test | `--- FAIL:` / `--- PASS:` output |
+| Cypress | `✗` failure markers |
+| JUnit XML | Standard JUnit/Surefire XML embedded in a log or ZIP |
+| Custom/generic reporters | Standalone `PASS` / `FAIL <name>` verdict lines and numbered execution-step traces (`12) Page.click(...) > expect(x).toBe(y)`) — common in hand-rolled WebdriverIO/Selenium wrapper frameworks |
+| ZIP Archives | Multi-file archives, including Jenkins' one-log-per-test-case export format |
 | .gz Files | Gzip compressed log files |
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                   Frontend (React)                   │
-│                                                     │
-│  UploadZone → ConfigPanel → ProgressTracker         │
-│                    ↓                                │
-│  SummaryCards → FilterBar → CaseList → CaseCard     │
-│  TrendChart → DiffView → ExportBar → History        │
-│                                                     │
-│  Vite dev server (:5173) ──proxy──→ /api            │
-└────────────────────┬────────────────────────────────┘
-                     │ SSE (Server-Sent Events)
-┌────────────────────▼────────────────────────────────┐
-│                  Backend (Express)                    │
-│                                                     │
-│  POST /api/analyze                                  │
-│    1. Accept file (multer, ≤100 MB)                 │
-│    2. Extract ZIP if needed (JSZip)                 │
-│    3. Preprocess (strip ANSI, Maven noise)          │
-│    4. Chunk by suite boundaries (80K chars)         │
-│    5. Analyze each chunk → Claude claude-sonnet-4-6           │
-│    6. Merge & deduplicate results                   │
-│    7. Stream progress via SSE                       │
-│                                                     │
-│  GET /api/health                                    │
-└─────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│                     Frontend (React)                       │
+│                                                             │
+│  UploadZone → ConfigPanel → ProgressTracker                │
+│                    ↓                                        │
+│  SummaryCards → FilterBar → CaseList → CaseCard             │
+│  TrendChart → DiffView → ExportBar → History                │
+│                                                             │
+│  Vite dev server (:5173) ──proxy──→ /api                    │
+└────────────────────┬────────────────────────────────────────┘
+                      │ SSE (Server-Sent Events)
+┌────────────────────▼────────────────────────────────────────┐
+│                    Backend (Express)                          │
+│                                                                │
+│  POST /api/analyze  — LOCAL-FIRST, zero AI calls              │
+│    1. Accept file (multer, ≤100 MB), stream to disk           │
+│    2. Extract ZIP if needed (JSZip, with zip-bomb size guard) │
+│    3. Preprocess (strip ANSI, Maven download noise)           │
+│    4. Parse with framework-aware regex/heuristics             │
+│       (localParser.ts — root cause, severity, category,       │
+│       cascading-failure grouping, flaky detection)            │
+│    5. Stream progress + final result via SSE                  │
+│                                                                │
+│  POST /api/analyze/fix-suggestions  — OPTIONAL, on-demand      │
+│    Batches failed cases (15/batch) into an LLM call for        │
+│    actionable fix suggestions. User supplies their own         │
+│    API key; not required to use the analyzer at all.           │
+│                                                                │
+│  GET /api/health                                               │
+└────────────────────────────────────────────────────────────────┘
 ```
 
-## Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `ANTHROPIC_API_KEY` | — | **Required.** Your Anthropic API key |
-| `PORT` | `3001` | Backend server port |
-| `MAX_FILE_SIZE_MB` | `100` | Maximum upload file size |
-| `CHUNK_SIZE_CHARS` | `80000` | Max characters per AI analysis chunk |
-| `VITE_API_URL` | `http://localhost:3001` | Backend URL for frontend (dev proxy handles this) |
+**Why local-first?** Regex/heuristic parsing tailored to each test framework's
+actual output format is both faster and more reliable than sending every log
+line to an LLM — no API cost, no rate limits, no network dependency, and
+results are reproducible. The optional AI step is reserved for the one place
+an LLM adds real value: turning a diagnosed failure into a concrete,
+actionable fix suggestion.
 
 ## How Large Files Are Handled
 
-The analyzer uses an intelligent **chunking strategy** to handle logs of any size:
+1. **Streamed uploads** — Files are streamed to a temp file on disk (not buffered fully in memory), keeping peak memory low for large logs.
+2. **Preprocessing** — Strips ANSI escape codes, Maven download noise, and collapses blank lines.
+3. **Zip-bomb guard** — ZIP entries are checked against both a per-file and an aggregate uncompressed-size limit before and after decompression, so a small malicious/corrupt archive can't exhaust server memory.
+4. **Per-file parsing** — For ZIP archives following Jenkins' one-log-per-test-case export convention, each file is parsed independently and classified as passed/failed based on what the parser actually finds — not a brittle keyword guess.
 
-1. **Preprocessing** — Strips ANSI escape codes, Maven download noise, and collapses blank lines (often reducing log size by 30-50%)
-2. **Suite-Boundary Splitting** — Chunks are split at natural boundaries (Surefire `Running` lines, pytest session starts) to keep test context intact
-3. **60-Line Overlap** — Each chunk includes the last 60 lines of the previous chunk for context continuity
-4. **Sequential Analysis** — Chunks are analyzed in order with accumulated context (seen suites, failure count) passed to each subsequent analysis
-5. **Dedup & Merge** — Results are deduplicated by test name + suite, with the most complete entry preserved
-
-This approach handles logs from 10 KB to 100 MB while maintaining analysis quality.
+This approach handles logs from 10 KB to 100 MB without ever calling an AI model.
 
 ## Key Features
 
-- **🔍 Root Cause Analysis** — Distinguishes symptoms from root causes; never reports `NullPointerException` as the cause
-- **🔗 Cascading Failures** — Groups tests that fail from a shared root cause; "fix 1 → unblock N"
-- **⚠ Flaky Detection** — Identifies intermittent failures (timeouts, race conditions, port conflicts)
+- **🔍 Root Cause Analysis** — Distinguishes symptoms from root causes using framework-aware exception/stack-trace parsing; prefers the first failing attempt (Main Run) over the last when retries fail for unrelated reasons
+- **🧾 Structured Log Evidence** — Surfaces what QE actually needs at a glance: the 1-2 execution steps immediately before the failure, an Expected vs Received diff, the page URL, and the failing step's duration — without opening the raw log
+- **⚙ Hook-Failure Attribution** — `beforeAll`/`beforeEach`/`afterAll`/`afterEach` failures are flagged as CRITICAL setup issues distinct from regular test failures, since they can silently block every other test in a suite
+- **👤 Debug Context** — Extracts the test-account email and labeled artifact links (screenshots, HTML diffs, CI log links) straight from the log body
+- **🔗 Cascading Failures** — Groups tests that fail from a shared root cause (matching exception type + stack frame, or identical error message scoped to the same suite); "fix 1 → unblock N"
+- **⚠ Flaky Detection** — Based on whether retry attempts actually produced different results, not a blind keyword scan of the whole file — a test failing identically every time is never mislabeled flaky
 - **📊 Category Breakdown** — Visual chart of failure categories with click-to-filter
 - **📋 Diff Mode** — Compare current vs previous build to isolate new failures
-- **💾 Export** — Download as JSON, CSV, or comprehensive Markdown report
+- **🤖 Optional AI Fix Suggestions** — Batched, on-demand LLM calls for actionable fixes; never required, never automatic
+- **💾 Export** — Download as JSON, CSV, or comprehensive Markdown report, including all of the above evidence fields
 - **📜 History** — Last 10 analyses saved locally for instant recall
+
+## Environment Variables
+
+None are required to run the analyzer — log parsing is 100% local. These are only relevant if you want AI fix suggestions to fall back to a server-side key instead of one entered in the UI:
+
+| Variable | Default | Description |
+|----------|---------|--------------|
+| `PORT` | `3001` | Backend server port |
+| `MAX_FILE_SIZE_MB` | `100` | Maximum upload file size (compressed) |
+| `MAX_ZIP_ENTRY_UNCOMPRESSED_MB` | `200` | Max decompressed size for a single ZIP entry |
+| `MAX_ZIP_TOTAL_UNCOMPRESSED_MB` | `500` | Max total decompressed size across a ZIP archive |
+| `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` / `OPENAI_API_KEY` / `GROQ_API_KEY` / `OPENROUTER_API_KEY` | — | Optional server-side fallback key for AI fix suggestions if none is supplied in the UI |
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | React 18 + Vite + TypeScript |
+| Frontend | React 19 + Vite + TypeScript |
 | Styling | Tailwind CSS v3 |
 | Backend | Node.js + Express (TypeScript) |
-| AI | Anthropic Claude claude-sonnet-4-6 |
+| Local parsing | Hand-written regex/heuristic engine (`localParser.ts`) — zero AI calls |
+| Optional AI | Anthropic, OpenAI, Gemini, Groq, OpenRouter, or Ollama (user's choice, user's key) |
+| Testing | Vitest, with fixture logs per test framework (including real-world regression fixtures) |
 | Charts | Recharts |
 | File Processing | JSZip, multer |
 | State | React hooks (useState, useReducer) |
@@ -126,6 +147,9 @@ This approach handles logs from 10 KB to 100 MB while maintaining analysis quali
 npm run dev          # Start both frontend and backend
 npm run build        # Build for production
 npm run install:all  # Install all dependencies
+
+cd backend
+npm test             # Run the backend test suite (Vitest)
 ```
 
 ## License
