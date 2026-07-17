@@ -4,11 +4,13 @@ import CaseCard from './CaseCard';
 
 interface CaseListProps {
   cases: TestCase[];
+  selectedCaseIds?: Set<string>;
+  onSelectionChange?: (caseId: string, selected: boolean) => void;
 }
 
 const CASES_PER_PAGE = 20;
 
-export default function CaseList({ cases }: CaseListProps) {
+export default function CaseList({ cases, selectedCaseIds = new Set(), onSelectionChange }: CaseListProps) {
   const [page, setPage] = useState(0);
 
   const totalPages = Math.ceil(cases.length / CASES_PER_PAGE);
@@ -32,7 +34,12 @@ export default function CaseList({ cases }: CaseListProps) {
   return (
     <div id="case-list" className="space-y-2">
       {paginatedCases.map((tc) => (
-        <CaseCard key={tc.id} testCase={tc} />
+        <CaseCard
+          key={tc.id}
+          testCase={tc}
+          isSelected={selectedCaseIds.has(tc.id)}
+          onSelectionChange={(selected) => onSelectionChange?.(tc.id, selected)}
+        />
       ))}
 
       {/* Pagination */}

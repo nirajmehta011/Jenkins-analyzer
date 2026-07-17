@@ -3,6 +3,8 @@ export interface IntegrationConfig {
   githubRepo: string;
   jiraBaseUrl: string;
   jiraProjectKey: string;
+  jenkinsBaseUrl: string;
+  jenkinsJobPath: string;
 }
 
 const INTEGRATION_CONFIG_KEY = 'jenkins-analyzer-integration-config';
@@ -12,6 +14,8 @@ const DEFAULT_CONFIG: IntegrationConfig = {
   githubRepo: '',
   jiraBaseUrl: '',
   jiraProjectKey: '',
+  jenkinsBaseUrl: '',
+  jenkinsJobPath: '',
 };
 
 export function loadIntegrationConfig(): IntegrationConfig {
@@ -55,4 +59,23 @@ export function buildJiraCreateUrl(config: IntegrationConfig): string | null {
   return config.jiraProjectKey
     ? `${base}/jira/software/projects/${config.jiraProjectKey}/create`
     : `${base}/secure/CreateIssue.jspa`;
+}
+
+export function extractTestId(testCaseName: string): string | null {
+  const parts = testCaseName.split('/');
+  if (parts.length === 0) return null;
+  const lastPart = parts[parts.length - 1].trim();
+  return lastPart || null;
+}
+
+export function buildJenkinsBuildUrl(config: IntegrationConfig, testIds: string[]): string | null {
+  if (!config.jenkinsBaseUrl || !config.jenkinsJobPath) return null;
+  if (testIds.length === 0) return null;
+
+  const base = config.jenkinsBaseUrl.replace(/\/$/, '');
+  const jobPath = config.jenkinsJobPath.replace(/^\//, '').replace(/\/$/, '');
+  const multipleGroups = testIds.join(',');
+  const params = new URLSearchParams({ MULTIPLE_GROUPS: multipleGroups });
+
+  return `${base}/job/${jobPath}/build?${params.toString()}`;
 }

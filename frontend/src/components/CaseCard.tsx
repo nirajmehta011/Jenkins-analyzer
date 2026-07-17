@@ -4,6 +4,8 @@ import CreateTicketModal from './CreateTicketModal';
 
 interface CaseCardProps {
   testCase: TestCase;
+  isSelected?: boolean;
+  onSelectionChange?: (selected: boolean) => void;
 }
 
 const IMAGE_URL_PATTERN = /\.(png|jpe?g|gif|webp)$/i;
@@ -32,12 +34,17 @@ const COMPLEXITY_STYLES: Record<string, string> = {
   HIGH: 'bg-red-500/20 text-red-300',
 };
 
-export default function CaseCard({ testCase: tc }: CaseCardProps) {
+export default function CaseCard({ testCase: tc, isSelected = false, onSelectionChange }: CaseCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['error', 'rootCause', 'evidence']));
   const [showTicketModal, setShowTicketModal] = useState(false);
 
   const statusStyle = STATUS_STYLES[tc.status] || STATUS_STYLES.FAILED;
+
+  const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    e.stopPropagation();
+    onSelectionChange?.(e.target.checked);
+  };
 
   const toggleSection = (section: string) => {
     setExpandedSections((prev) => {
@@ -67,20 +74,33 @@ export default function CaseCard({ testCase: tc }: CaseCardProps) {
       `}
     >
       {/* Collapsed header */}
-      <button
-        onClick={() => setIsExpanded(!isExpanded)}
+      <div
         className="w-full flex items-center gap-3 px-4 py-3 text-left"
       >
+        {/* Checkbox */}
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={handleCheckboxChange}
+          className="w-4 h-4 rounded cursor-pointer shrink-0"
+          title="Select this case for re-run"
+        />
+
         {/* Status dot */}
         <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${statusStyle.dot}`} />
 
-        {/* Test name */}
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-white truncate">{tc.name}</p>
-          {tc.suite && (
-            <p className="text-xs text-slate-500 truncate font-mono">{tc.suite}</p>
-          )}
-        </div>
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="flex-1 flex items-center gap-3 text-left min-w-0"
+        >
+          {/* Test name */}
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-white truncate">{tc.name}</p>
+            {tc.suite && (
+              <p className="text-xs text-slate-500 truncate font-mono">{tc.suite}</p>
+            )}
+          </div>
+        </button>
 
         {/* Badges */}
         <div className="flex items-center gap-2 shrink-0">
@@ -127,7 +147,7 @@ export default function CaseCard({ testCase: tc }: CaseCardProps) {
             <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
           </svg>
         </div>
-      </button>
+      </div>
 
       {/* Expanded content */}
       {isExpanded && (

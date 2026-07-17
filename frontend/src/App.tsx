@@ -14,6 +14,8 @@ import DiffUpload, { type DiffResult } from './components/DiffUpload';
 import DiffView from './components/DiffView';
 import AnalysisHistory from './components/AnalysisHistory';
 import FailureSummary from './components/FailureSummary';
+import JenkinsActionBar from './components/JenkinsActionBar';
+import JenkinsConfigPanel from './components/JenkinsConfigPanel';
 import type { TestStatus, FailureCategory, Severity } from './types/analysis';
 
 export default function App() {
@@ -49,6 +51,10 @@ export default function App() {
   const [cascadingOnly, setCascadingOnly] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [diffResult, setDiffResult] = useState<DiffResult | null>(null);
+
+  // Jenkins integration state
+  const [selectedCaseIds, setSelectedCaseIds] = useState<Set<string>>(new Set());
+  const [showJenkinsConfig, setShowJenkinsConfig] = useState(false);
 
   // Available categories from results
   const availableCategories = useMemo(() => {
@@ -98,6 +104,18 @@ export default function App() {
     setStatusFilter('ALL');
   };
 
+  const handleCaseSelectionChange = (caseId: string, selected: boolean) => {
+    setSelectedCaseIds((prev) => {
+      const next = new Set(prev);
+      if (selected) {
+        next.add(caseId);
+      } else {
+        next.delete(caseId);
+      }
+      return next;
+    });
+  };
+
   const showUploadView = !result && !isAnalyzing;
   const showProgressView = isAnalyzing && progress;
   const showResultView = result && !isAnalyzing;
@@ -141,6 +159,7 @@ export default function App() {
                   setFlakyOnly(false);
                   setCascadingOnly(false);
                   setSearchQuery('');
+                  setSelectedCaseIds(new Set());
                 }}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 text-slate-300
                          hover:bg-slate-700 hover:text-white transition-colors border border-slate-700"
@@ -377,8 +396,26 @@ export default function App() {
             )}
 
             {/* Case List */}
-            <CaseList cases={filteredCases} />
+            <CaseList
+              cases={filteredCases}
+              selectedCaseIds={selectedCaseIds}
+              onSelectionChange={handleCaseSelectionChange}
+            />
           </div>
+        )}
+
+        {/* Jenkins Action Bar */}
+        {showResultView && result && (
+          <JenkinsActionBar
+            cases={result.cases}
+            selectedCaseIds={selectedCaseIds}
+            onConfigClick={() => setShowJenkinsConfig(true)}
+          />
+        )}
+
+        {/* Jenkins Config Modal */}
+        {showJenkinsConfig && (
+          <JenkinsConfigPanel onClose={() => setShowJenkinsConfig(false)} />
         )}
 
         {/* Empty state for no results after analysis */}
