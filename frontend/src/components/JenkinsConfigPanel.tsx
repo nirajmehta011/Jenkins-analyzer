@@ -85,7 +85,10 @@ export default function JenkinsConfigPanel({ onClose }: JenkinsConfigPanelProps)
                        placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
             <p className="text-xs text-slate-500 mt-1">
-              Path to your parameterized build job (e.g., job/digital-ui-automation)
+              The full job path segment as it appears in your Jenkins job's own URL, including the leading
+              "job/" — e.g. <code className="font-mono text-slate-400">job/digital-ui-automation</code>. For a
+              job nested in folders, Jenkins repeats it per level:{' '}
+              <code className="font-mono text-slate-400">job/team-folder/job/digital-ui-automation</code>.
             </p>
           </div>
 
@@ -94,7 +97,7 @@ export default function JenkinsConfigPanel({ onClose }: JenkinsConfigPanelProps)
             <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-lg p-3">
               <p className="text-xs font-semibold text-indigo-400 mb-1">Preview</p>
               <p className="text-xs text-slate-400 font-mono break-all">
-                {config.jenkinsBaseUrl}/job/{config.jenkinsJobPath}/build?MULTIPLE_GROUPS=...
+                {config.jenkinsBaseUrl}/{config.jenkinsJobPath}/build?MULTIPLE_GROUPS=...
               </p>
             </div>
           )}

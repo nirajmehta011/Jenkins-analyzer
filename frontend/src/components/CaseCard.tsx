@@ -40,6 +40,7 @@ export default function CaseCard({ testCase: tc, isSelected = false, onSelection
   const [showTicketModal, setShowTicketModal] = useState(false);
 
   const statusStyle = STATUS_STYLES[tc.status] || STATUS_STYLES.FAILED;
+  const isFailedOrError = tc.status === 'FAILED' || tc.status === 'ERROR';
 
   const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     e.stopPropagation();
@@ -77,14 +78,18 @@ export default function CaseCard({ testCase: tc, isSelected = false, onSelection
       <div
         className="w-full flex items-center gap-3 px-4 py-3 text-left"
       >
-        {/* Checkbox */}
-        <input
-          type="checkbox"
-          checked={isSelected}
-          onChange={handleCheckboxChange}
-          className="w-4 h-4 rounded cursor-pointer shrink-0"
-          title="Select this case for re-run"
-        />
+        {/* Checkbox — selection is only meaningful for cases you'd want to re-run in Jenkins */}
+        {isFailedOrError ? (
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={handleCheckboxChange}
+            className="w-4 h-4 rounded cursor-pointer shrink-0"
+            title="Select this case for re-run"
+          />
+        ) : (
+          <div className="w-4 h-4 shrink-0" />
+        )}
 
         {/* Status dot */}
         <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${statusStyle.dot}`} />

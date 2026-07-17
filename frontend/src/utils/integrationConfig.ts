@@ -68,6 +68,14 @@ export function extractTestId(testCaseName: string): string | null {
   return lastPart || null;
 }
 
+/**
+ * `jenkinsJobPath` is expected to be the full Jenkins job path segment as it
+ * appears in the job's own URL, e.g. "job/digital-ui-automation" or, for a
+ * job nested in folders, "job/team-folder/job/digital-ui-automation" — Jenkins
+ * repeats the "job/" prefix per folder level, so we must NOT add our own
+ * "job/" on top of what the user enters (that produced a broken double
+ * "job/job/..." URL previously).
+ */
 export function buildJenkinsBuildUrl(config: IntegrationConfig, testIds: string[]): string | null {
   if (!config.jenkinsBaseUrl || !config.jenkinsJobPath) return null;
   if (testIds.length === 0) return null;
@@ -77,5 +85,5 @@ export function buildJenkinsBuildUrl(config: IntegrationConfig, testIds: string[
   const multipleGroups = testIds.join(',');
   const params = new URLSearchParams({ MULTIPLE_GROUPS: multipleGroups });
 
-  return `${base}/job/${jobPath}/build?${params.toString()}`;
+  return `${base}/${jobPath}/build?${params.toString()}`;
 }
