@@ -23,6 +23,19 @@ export interface SymptomVsCause {
   cause: string;
 }
 
+export interface RelatedLink {
+  label: string;
+  url: string;
+}
+
+export interface EvidenceContext {
+  precedingSteps: string[];
+  expected: string | null;
+  received: string | null;
+  pageUrl: string | null;
+  duration: string | null;
+}
+
 export interface CascadingGroup {
   groupId: string;
   rootCause: string;
@@ -50,6 +63,11 @@ export interface TestCase {
   fixComplexity: FixComplexity | null;
   logEvidenceQuote: string | null;
   parserConfidence: Confidence;
+  testUserEmail: string | null;
+  relatedLinks: RelatedLink[];
+  attemptCount: number | null;
+  isHookFailure: boolean;
+  evidenceContext: EvidenceContext | null;
 }
 
 export interface BuildSummary {

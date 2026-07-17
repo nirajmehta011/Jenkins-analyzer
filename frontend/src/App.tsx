@@ -126,7 +126,7 @@ export default function App() {
                 <h1 className="text-xl font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">
                   Jenkins Log Analyzer
                 </h1>
-                <p className="text-xs text-slate-500">AI-powered CI/CD failure analysis</p>
+                <p className="text-xs text-slate-500">Local-first CI/CD failure analysis</p>
               </div>
             </div>
 

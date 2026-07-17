@@ -5,6 +5,12 @@ interface CaseCardProps {
   testCase: TestCase;
 }
 
+const IMAGE_URL_PATTERN = /\.(png|jpe?g|gif|webp)$/i;
+
+function isImageUrl(url: string): boolean {
+  return IMAGE_URL_PATTERN.test(url.split('?')[0]);
+}
+
 const STATUS_STYLES: Record<string, { dot: string; bg: string }> = {
   PASSED: { dot: 'bg-emerald-400', bg: 'border-emerald-500/20' },
   FAILED: { dot: 'bg-red-400', bg: 'border-red-500/20' },
@@ -27,7 +33,7 @@ const COMPLEXITY_STYLES: Record<string, string> = {
 
 export default function CaseCard({ testCase: tc }: CaseCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['error', 'rootCause']));
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['error', 'rootCause', 'evidence']));
 
   const statusStyle = STATUS_STYLES[tc.status] || STATUS_STYLES.FAILED;
 
@@ -76,6 +82,19 @@ export default function CaseCard({ testCase: tc }: CaseCardProps) {
 
         {/* Badges */}
         <div className="flex items-center gap-2 shrink-0">
+          {tc.isHookFailure && (
+            <span
+              className="px-2 py-0.5 rounded-md bg-red-600/25 text-red-300 text-xs font-semibold ring-1 ring-red-500/40"
+              title="A setup/teardown hook failed — this can silently block every other test in the same suite"
+            >
+              ⚙ Setup Hook
+            </span>
+          )}
+          {tc.attemptCount !== null && tc.attemptCount > 1 && (
+            <span className="px-2 py-0.5 rounded-md bg-slate-700 text-slate-300 text-xs font-medium" title="Number of execution attempts detected in this log">
+              🔁 {tc.attemptCount} attempts
+            </span>
+          )}
           {tc.isFlaky && (
             <span className="px-2 py-0.5 rounded-md bg-orange-500/20 text-orange-300 text-xs font-medium">
               ⚠ Flaky
@@ -111,6 +130,59 @@ export default function CaseCard({ testCase: tc }: CaseCardProps) {
       {/* Expanded content */}
       {isExpanded && (
         <div className="px-4 pb-4 space-y-3 border-t border-slate-700/50">
+          {/* Debug context: test-account email + artifact links (screenshot/HTML diff/etc).
+              Shown up front, uncollapsed — this is usually the fastest path for QE
+              to jump straight to visual evidence or confirm which account hit the failure. */}
+          {(tc.testUserEmail || tc.relatedLinks.length > 0) && (
+            <div className="pt-3 space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                {tc.testUserEmail && (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-700/60 text-slate-300 text-xs font-mono">
+                    👤 {tc.testUserEmail}
+                  </span>
+                )}
+                {tc.relatedLinks.filter((link) => !isImageUrl(link.url)).map((link) => (
+                  <a
+                    key={link.url}
+                    href={link.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-indigo-500/15 text-indigo-300 text-xs font-medium hover:bg-indigo-500/25 transition-colors"
+                  >
+                    🔗 {link.label}
+                  </a>
+                ))}
+              </div>
+
+              {/* Screenshot thumbnails — click through to full size */}
+              {tc.relatedLinks.filter((link) => isImageUrl(link.url)).length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {tc.relatedLinks.filter((link) => isImageUrl(link.url)).map((link) => (
+                    <a
+                      key={link.url}
+                      href={link.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="group relative block w-28 h-20 rounded-lg overflow-hidden border border-slate-700 hover:border-indigo-500/60 transition-colors"
+                      title={`${link.label} — click to view full size`}
+                    >
+                      <img
+                        src={link.url}
+                        alt={link.label}
+                        loading="lazy"
+                        className="w-full h-full object-cover"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                      />
+                      <span className="absolute bottom-0 inset-x-0 bg-black/70 text-[10px] text-slate-200 px-1.5 py-0.5 truncate">
+                        {link.label}
+                      </span>
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Error message */}
           {tc.errorMessage && (
             <CollapsibleSection
@@ -212,15 +284,69 @@ export default function CaseCard({ testCase: tc }: CaseCardProps) {
           ) : null}
 
           {/* Log evidence */}
-          {tc.logEvidenceQuote && (
+          {(tc.logEvidenceQuote || tc.evidenceContext) && (
             <CollapsibleSection
               title="Log Evidence"
               isOpen={expandedSections.has('evidence')}
               onToggle={() => toggleSection('evidence')}
             >
-              <blockquote className="font-mono text-xs text-slate-400 italic bg-slate-900/50 rounded-lg p-3 border-l-2 border-indigo-500">
-                {tc.logEvidenceQuote}
-              </blockquote>
+              <div className="space-y-2.5">
+                {/* Steps leading up to the failure — what the test was doing right before it broke */}
+                {tc.evidenceContext && tc.evidenceContext.precedingSteps.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Leading up to failure</p>
+                    <div className="space-y-1">
+                      {tc.evidenceContext.precedingSteps.map((step, idx) => (
+                        <p key={idx} className="font-mono text-[11px] text-slate-500 truncate" title={step}>
+                          {step}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Expected vs Received — scannable diff instead of buried prose */}
+                {tc.evidenceContext && (tc.evidenceContext.expected || tc.evidenceContext.received) && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-2.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400/80 mb-1">Expected</p>
+                      <p className="font-mono text-xs text-emerald-200 break-words">{tc.evidenceContext.expected ?? '—'}</p>
+                    </div>
+                    <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-2.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-red-400/80 mb-1">Received</p>
+                      <p className="font-mono text-xs text-red-200 break-words">{tc.evidenceContext.received ?? '—'}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Page + duration at a glance */}
+                {tc.evidenceContext && (tc.evidenceContext.pageUrl || tc.evidenceContext.duration) && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {tc.evidenceContext.pageUrl && (
+                      <a
+                        href={tc.evidenceContext.pageUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-700/50 text-slate-300 text-[11px] hover:text-indigo-300 transition-colors max-w-full truncate"
+                        title={tc.evidenceContext.pageUrl}
+                      >
+                        🌐 {tc.evidenceContext.pageUrl.replace(/^https?:\/\//, '')}
+                      </a>
+                    )}
+                    {tc.evidenceContext.duration && (
+                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-slate-700/50 text-slate-400 text-[11px]">
+                        ⏱ {tc.evidenceContext.duration}
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {tc.logEvidenceQuote && (
+                  <blockquote className="font-mono text-xs text-slate-400 italic bg-slate-900/50 rounded-lg p-3 border-l-2 border-indigo-500">
+                    {tc.logEvidenceQuote}
+                  </blockquote>
+                )}
+              </div>
             </CollapsibleSection>
           )}
 
