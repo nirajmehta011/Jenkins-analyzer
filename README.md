@@ -46,12 +46,7 @@ To use the "Re-run in Jenkins" button, click **Configure Jenkins** (shown in the
 
 For a job nested in folders, Jenkins repeats `job/` per folder level — enter it the same way, e.g. `job/team-folder/job/digital-ui-automation`.
 
-This generates a build URL like:
-```
-https://jenkins.mycompany.com/job/digital-ui-automation/build?MULTIPLE_GROUPS=NewCC-DQE-T170,NM-T5450
-```
-
-Selected test IDs are extracted by taking the last `/`-separated segment of each test's name (e.g. `"New CC - E2E ... / NewCC-DQE-T170"` → `NewCC-DQE-T170`), then joined into the configured test-ID parameter. If your job names that parameter something other than `MULTIPLE_GROUPS`, change it in the config panel. Clicking the button opens the pre-filled build form in a new tab — it does **not** trigger the build automatically; you still click Build yourself. Config is saved to `localStorage`, same as the GitHub/Jira ticket-creation settings.
+Selected test IDs are extracted by taking the last `/`-separated segment of each test's name (e.g. `"New CC - E2E ... / NewCC-DQE-T170"` → `NewCC-DQE-T170`), joined into a comma-separated list. Clicking **Copy IDs + Open Jenkins** copies that list to your clipboard and opens the job's build form in a new tab — it does **not** trigger the build automatically, you still click Build yourself. Jenkins' manual parameter-confirmation form doesn't read values from the URL query string (that's only honored by a different endpoint, `/buildWithParameters`, which skips the confirmation step entirely and starts the build immediately — deliberately not used here), so paste the copied IDs into the configured parameter field (default `MULTIPLE_GROUPS`, change it in the config panel if your job names it differently) before clicking Build. Config is saved to `localStorage`, same as the GitHub/Jira ticket-creation settings.
 
 ## Jira / GitHub Ticket Creation Setup
 
