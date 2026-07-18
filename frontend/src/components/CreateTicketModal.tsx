@@ -144,7 +144,9 @@ export default function CreateTicketModal({ testCase, onClose }: CreateTicketMod
           </div>
           {jiraUrl && (
             <p className="text-[11px] text-slate-500">
-              Jira doesn't support pre-filling the create form reliably — this copies the description to your clipboard and opens the create page. Just paste it in.
+              {config.jiraCreateUrlTemplate
+                ? 'Copies the description to your clipboard and opens your configured Jira URL. Paste it in.'
+                : "Jira doesn't support pre-filling the create form reliably — this copies the description to your clipboard and opens your project page. Click Create in Jira, then paste it in."}
             </p>
           )}
 
@@ -184,7 +186,7 @@ export default function CreateTicketModal({ testCase, onClose }: CreateTicketMod
                   <input
                     value={config.jiraBaseUrl}
                     onChange={(e) => updateConfig({ jiraBaseUrl: e.target.value })}
-                    placeholder="https://yourcompany.atlassian.net"
+                    placeholder="https://yourcompany.atlassian.net or https://jira.yourcompany.com"
                     className="w-full mt-1 bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200"
                   />
                 </div>
@@ -196,6 +198,22 @@ export default function CreateTicketModal({ testCase, onClose }: CreateTicketMod
                     placeholder="e.g. QA"
                     className="w-full mt-1 bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200"
                   />
+                </div>
+                <div className="col-span-2">
+                  <label className="text-[10px] text-slate-500 uppercase tracking-wider">
+                    Custom Create-Issue URL <span className="normal-case text-slate-600">(optional, advanced)</span>
+                  </label>
+                  <input
+                    value={config.jiraCreateUrlTemplate}
+                    onChange={(e) => updateConfig({ jiraCreateUrlTemplate: e.target.value })}
+                    placeholder="https://jira.medallia.com/secure/CreateIssue.jspa?pid=12345&issuetype=1"
+                    className="w-full mt-1 bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 font-mono"
+                  />
+                  <p className="text-[10px] text-slate-600 mt-1">
+                    Since Jira's real create-issue URL varies by instance, the default just opens your project page (one click from Create).
+                    If you know your instance's exact working URL — click "Create" in Jira and copy the address — paste it here.
+                    You can use <code className="font-mono text-slate-500">{'{PROJECT_KEY}'}</code> as a placeholder for the project key above.
+                  </p>
                 </div>
               </div>
             )}

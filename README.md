@@ -42,6 +42,7 @@ To use the "Re-run in Jenkins" button, click **Configure Jenkins** (shown in the
 |-------|-------------|---------|
 | Jenkins Base URL | The root URL of your Jenkins instance, no trailing slash | `https://jenkins.mycompany.com` |
 | Job Path | The full job path segment **exactly as it appears in your job's own Jenkins URL**, including the leading `job/` | `job/digital-ui-automation` |
+| Test ID Parameter Name | The build parameter your job uses to accept a comma-separated list of test IDs — job-specific, defaults to `MULTIPLE_GROUPS` | `MULTIPLE_GROUPS` |
 
 For a job nested in folders, Jenkins repeats `job/` per folder level — enter it the same way, e.g. `job/team-folder/job/digital-ui-automation`.
 
@@ -50,7 +51,11 @@ This generates a build URL like:
 https://jenkins.mycompany.com/job/digital-ui-automation/build?MULTIPLE_GROUPS=NewCC-DQE-T170,NM-T5450
 ```
 
-Selected test IDs are extracted by taking the last `/`-separated segment of each test's name (e.g. `"New CC - E2E ... / NewCC-DQE-T170"` → `NewCC-DQE-T170`), then joined into the job's `MULTIPLE_GROUPS` parameter. Clicking the button opens the pre-filled build form in a new tab — it does **not** trigger the build automatically; you still click Build yourself. Config is saved to `localStorage`, same as the GitHub/Jira ticket-creation settings.
+Selected test IDs are extracted by taking the last `/`-separated segment of each test's name (e.g. `"New CC - E2E ... / NewCC-DQE-T170"` → `NewCC-DQE-T170`), then joined into the configured test-ID parameter. If your job names that parameter something other than `MULTIPLE_GROUPS`, change it in the config panel. Clicking the button opens the pre-filled build form in a new tab — it does **not** trigger the build automatically; you still click Build yourself. Config is saved to `localStorage`, same as the GitHub/Jira ticket-creation settings.
+
+## Jira / GitHub Ticket Creation Setup
+
+From an expanded failed case, click **Create Ticket** to get a pre-filled title/description plus one-click actions: **Open Pre-filled GitHub Issue** (reliably prefilled via GitHub's own URL query params) and **Copy + Open Jira**. Jira does not have a single "create issue" URL that reliably works across editions (Cloud vs. self-hosted Server/Data Center) and versions, so rather than guess one, the default behavior copies the description to your clipboard and opens your project page (`{jiraBaseUrl}/browse/{PROJECT_KEY}` — a stable link across virtually every Jira version), one click from Jira's own **Create** button. If you know your instance's actual working create-issue URL (find it by clicking Create in your own Jira UI and copying the resulting address), paste it into the optional **Custom Create-Issue URL** field in the same settings panel — it supports a `{PROJECT_KEY}` placeholder if needed.
 
 ## Supported Log Formats
 

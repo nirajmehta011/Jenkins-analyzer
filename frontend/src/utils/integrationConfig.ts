@@ -3,8 +3,20 @@ export interface IntegrationConfig {
   githubRepo: string;
   jiraBaseUrl: string;
   jiraProjectKey: string;
+  /**
+   * Optional full-URL override for "create issue", with an optional
+   * {PROJECT_KEY} placeholder. Jira's real create-issue URL varies by
+   * edition/version/project-type (classic vs. team-managed, Cloud vs.
+   * Server/Data Center) — there's no single path that works everywhere, so
+   * rather than guess one, users who know their instance's actual working
+   * URL (found by clicking "Create" in their own Jira UI and copying the
+   * resulting address) can paste it here.
+   */
+  jiraCreateUrlTemplate: string;
   jenkinsBaseUrl: string;
   jenkinsJobPath: string;
+  /** Jenkins parameter name the selected test IDs are sent under. Defaults to MULTIPLE_GROUPS but varies by job config. */
+  jenkinsTestIdParam: string;
 }
 
 const INTEGRATION_CONFIG_KEY = 'jenkins-analyzer-integration-config';
@@ -14,8 +26,10 @@ const DEFAULT_CONFIG: IntegrationConfig = {
   githubRepo: '',
   jiraBaseUrl: '',
   jiraProjectKey: '',
+  jiraCreateUrlTemplate: '',
   jenkinsBaseUrl: '',
   jenkinsJobPath: '',
+  jenkinsTestIdParam: 'MULTIPLE_GROUPS',
 };
 
 export function loadIntegrationConfig(): IntegrationConfig {
@@ -47,17 +61,35 @@ export function buildGithubIssueUrl(config: IntegrationConfig, title: string, bo
 }
 
 /**
- * Jira Cloud does not reliably support prefilling the create-issue form via
- * URL (varies by screen scheme/version, and the old query-param prefill
- * pattern was deprecated) — this only opens the create page for the
- * configured project. The body/title still need to be pasted in manually,
- * which is what the Copy buttons are for.
+ * Jira does not reliably support prefilling the create-issue form via URL —
+ * the actual working path varies by edition (Cloud vs. Server/Data Center),
+ * version, and project type (classic vs. team-managed), and guessing one
+ * (e.g. the Cloud-only `/jira/software/projects/{key}/create` this function
+ * used previously) produces a broken link on any other setup, including
+ * self-hosted instances on a custom domain.
+ *
+ * Precedence:
+ *   1. `jiraCreateUrlTemplate`, if the user supplied their own known-working
+ *      URL (with an optional {PROJECT_KEY} placeholder) — always wins.
+ *   2. `/browse/{PROJECT_KEY}` — not a create form, but a URL pattern that
+ *      has been stable across every Jira edition/version for over a decade;
+ *      it lands on the project itself, one click from Jira's own "Create"
+ *      button, so navigation is always correct even without prefill.
+ *   3. `/secure/CreateIssue.jspa` — generic create screen when no project
+ *      key is configured at all.
+ * The body/title still need to be pasted in manually either way, which is
+ * what the Copy buttons are for.
  */
 export function buildJiraCreateUrl(config: IntegrationConfig): string | null {
   if (!config.jiraBaseUrl) return null;
   const base = config.jiraBaseUrl.replace(/\/$/, '');
+
+  if (config.jiraCreateUrlTemplate) {
+    return config.jiraCreateUrlTemplate.replace(/\{PROJECT_KEY\}/g, config.jiraProjectKey || '');
+  }
+
   return config.jiraProjectKey
-    ? `${base}/jira/software/projects/${config.jiraProjectKey}/create`
+    ? `${base}/browse/${config.jiraProjectKey}`
     : `${base}/secure/CreateIssue.jspa`;
 }
 
@@ -82,8 +114,12 @@ export function buildJenkinsBuildUrl(config: IntegrationConfig, testIds: string[
 
   const base = config.jenkinsBaseUrl.replace(/\/$/, '');
   const jobPath = config.jenkinsJobPath.replace(/^\//, '').replace(/\/$/, '');
-  const multipleGroups = testIds.join(',');
-  const params = new URLSearchParams({ MULTIPLE_GROUPS: multipleGroups });
+  // Jenkins parameter names are job-specific — MULTIPLE_GROUPS is just the
+  // default seen on the one job this feature was built against; other jobs
+  // may name their test-selection parameter differently.
+  const paramName = config.jenkinsTestIdParam || 'MULTIPLE_GROUPS';
+  const testIdValue = testIds.join(',');
+  const params = new URLSearchParams({ [paramName]: testIdValue });
 
   return `${base}/${jobPath}/build?${params.toString()}`;
 }

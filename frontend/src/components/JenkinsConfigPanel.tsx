@@ -92,12 +92,32 @@ export default function JenkinsConfigPanel({ onClose }: JenkinsConfigPanelProps)
             </p>
           </div>
 
+          {/* Test ID Parameter Name */}
+          <div>
+            <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider block mb-1">
+              Test ID Parameter Name
+            </label>
+            <input
+              type="text"
+              placeholder="MULTIPLE_GROUPS"
+              value={config.jenkinsTestIdParam}
+              onChange={(e) => updateConfig({ jenkinsTestIdParam: e.target.value })}
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200
+                       placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+            />
+            <p className="text-xs text-slate-500 mt-1">
+              The build parameter your job uses to accept a comma-separated list of test IDs. Defaults to{' '}
+              <code className="font-mono text-slate-400">MULTIPLE_GROUPS</code>, but this is job-specific —
+              check your job's own parameter list if re-runs aren't picking up the right tests.
+            </p>
+          </div>
+
           {/* Preview */}
           {isConfigured && (
             <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-lg p-3">
               <p className="text-xs font-semibold text-indigo-400 mb-1">Preview</p>
               <p className="text-xs text-slate-400 font-mono break-all">
-                {config.jenkinsBaseUrl}/{config.jenkinsJobPath}/build?MULTIPLE_GROUPS=...
+                {config.jenkinsBaseUrl}/{config.jenkinsJobPath}/build?{config.jenkinsTestIdParam || 'MULTIPLE_GROUPS'}=...
               </p>
             </div>
           )}
