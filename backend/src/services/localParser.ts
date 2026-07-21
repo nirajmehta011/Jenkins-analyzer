@@ -100,8 +100,13 @@ const GENERIC_ERROR = /(?:Error|FAILURE|FATAL):\s*(.+)/i;
 // condition to resolve." Without this, a line like that matches none of
 // the patterns above (no Exception/Error suffix, no assertion keywords)
 // and the real failure reason is silently lost even though it's sitting
-// right there.
-const PLAIN_FAILURE_SENTENCE = /^(Timed?\s*out\b.*|Timeout\b.*|Failed to\b.*|Unable to\b.*|Cannot\b.*|Could not\b.*)/i;
+// right there. The optional leading `<identifier>: ` group additionally
+// matches Playwright's own action-timeout format, e.g. "locator.click:
+// Timeout 30000ms exceeded." or "page.goto: Timeout 60000ms exceeded." —
+// extremely common in real Playwright suites, and previously fell through
+// every pattern here since the sentence itself doesn't start the line, the
+// failing API call's own name does.
+const PLAIN_FAILURE_SENTENCE = /^(?:[\w.]+:\s*)?(Timed?\s*out\b.*|Timeout\b.*|Failed to\b.*|Unable to\b.*|Cannot\b.*|Could not\b.*)/i;
 
 // Stack frames
 const JAVA_STACK = /^\s+at\s+([\w.$]+)\.([\w<>]+)\(([^)]+)\)/;

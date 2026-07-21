@@ -206,6 +206,26 @@ describe('parseLogFile — per-framework extraction', () => {
     expect(cases[0].stackFrames.some(f => /^\d+\)/.test(f))).toBe(true);
   });
 
+  it('extracts Playwright\'s own locator-action-timeout message ("locator.click: Timeout Nms exceeded.") instead of falling back to "Unknown failure detail"', () => {
+    // Real-world regression: PLAIN_FAILURE_SENTENCE required the failure
+    // sentence ("Timeout...") to be the very first thing on the line, but
+    // Playwright's own action-timeout errors are prefixed by the failing
+    // call's own name ("locator.click: Timeout 30000ms exceeded.",
+    // "locator.innerText: ...", "page.goto: ..."), so every message and
+    // its log evidence were silently dropped for any test using this
+    // extremely common Playwright error shape — 17 of 19 failures in one
+    // real archive got a generic "unclassified failure" with zero evidence.
+    const content = loadFixture('playwright-locator-timeout.log');
+    const cases = parseLogFile(content, 'test.log');
+
+    expect(cases).toHaveLength(1);
+    const tc = cases[0];
+    expect(tc.errorMessage).toContain('locator.click: Timeout 30000ms exceeded.');
+    expect(tc.errorMessage).not.toContain('Unknown failure detail');
+    expect(tc.logEvidenceQuote).toBeTruthy();
+    expect(tc.logEvidenceQuote).toContain('locator.click');
+  });
+
   it('does not let an interleaved afterEach hook failure inflate the attempt count or leak its content into the test\'s own evidence', () => {
     // Real-world regression: a single log.txt interleaved the test's own
     // FAIL, then a PASS (a later/unrelated pass), then a FAIL afterEach hook

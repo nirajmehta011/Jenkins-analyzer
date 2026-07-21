@@ -1,0 +1,19 @@
+------------------------------------------------------------------------------------------------------------------------
+Package: e2e-tests-digital
+Filename: <repoRoot>/src/tests/regression/newCommandCenter/customParameter/DQE-T166_NewCCUpdateExistingCPToReusableSyncWithMEC.test.ts
+Test: CP updating to Reusable > Validate the ability to make existing CP to Reusable CP and sync it with MEC via Q field or E field/NewCC-DQE-T166
+------------------------------------------------------------------------------------------------------------------------
+
+1255) Feedback - List FeedbackListPage.click (FeedbackListPage.ts:36) > argusBrowser.click('button[data-test-name=\'filters-toggle\']') (240ms)
+1256) Feedback - List FeedbackListPage.click (FeedbackListPage.ts:39) > argusBrowser.click('div[data-testid="SelectMenuListWrapper"] [data-label="166_1784586501350"]') (30.3s)
+
+FAIL Validate the ability to make existing CP to Reusable CP and sync it with MEC via Q field or E field/NewCC-DQE-T166
+./src/tests/regression/newCommandCenter/customParameter/DQE-T166_NewCCUpdateExistingCPToReusableSyncWithMEC.test.ts
+
+locator.click: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator('div[data-testid="SelectMenuListWrapper"] [data-label="166_1784586501350"]').first()
+
+    on https://cr-den-qa1-digital-automation.qa.den.medallia.com/merlinmd/applications/ex_WEB-39/pages/1861
+    at FeedbackListPage.click (<repoPath>/packages/digital-page-objects/src/pages/mec/reporting/ReportingBasePage.ts:22:28)
+    at FeedbackListPage.setFormFilter (<repoPath>/packages/digital-page-objects/src/pages/mec/reporting/feedback/FeedbackListPage.ts:40:9)
