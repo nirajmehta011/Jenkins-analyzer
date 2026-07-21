@@ -27,7 +27,7 @@ export default function ConfigPanel({
   onToggleOption,
   disabled = false,
 }: ConfigPanelProps) {
-  const updateConfig = (field: keyof ProjectConfig, value: string) => {
+  const updateConfig = (field: keyof ProjectConfig, value: string | boolean) => {
     onConfigChange({ ...config, [field]: value });
   };
 
@@ -123,6 +123,28 @@ export default function ConfigPanel({
                      placeholder:text-slate-500 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none
                      disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-mono resize-y"
           />
+
+          {config.failedCasesInput && config.failedCasesInput.trim().length > 0 && (
+            <label
+              htmlFor="skip-non-matching"
+              className="mt-2 flex items-start gap-2.5 cursor-pointer"
+            >
+              <input
+                id="skip-non-matching"
+                type="checkbox"
+                checked={config.skipNonMatchingFiles || false}
+                onChange={(e) => updateConfig('skipNonMatchingFiles', e.target.checked)}
+                disabled={disabled}
+                className="mt-0.5 w-4 h-4 rounded border-slate-500 text-indigo-500 focus:ring-indigo-500 bg-slate-700"
+              />
+              <span className="text-xs text-slate-400">
+                <span className="text-slate-300 font-medium">Skip files not matching this list</span>
+                {' '}— much faster and lower memory on large archives, useful if uploads are failing on a
+                memory-constrained deployment. Trade-off: only matches by file name, not log content, so an
+                imprecise list may miss a failure. Leave unchecked unless you need it.
+              </span>
+            </label>
+          )}
         </div>
       </div>
 

@@ -239,6 +239,7 @@ router.post('/', upload.single('file'), async (req: Request, res: Response): Pro
 
     const customQueries = parseFailedCasesList(config.failedCasesInput);
     const hasCustomQueries = customQueries.length > 0;
+    const skipNonMatching = hasCustomQueries && config.skipNonMatchingFiles === true;
 
     sendSSE({ stage: 'uploading', pct: 5, message: 'File received, processing...' });
 
@@ -246,6 +247,7 @@ router.post('/', upload.single('file'), async (req: Request, res: Response): Pro
     const logFiles = new Map<string, string>();
     const passedCases: TestCase[] = [];
     let fullText = '';
+    let xmlCases: TestCase[] = [];
 
     if (filename.endsWith('.zip')) {
       sendSSE({ stage: 'preprocessing', pct: 10, message: 'Processing ZIP archive contents...' });
@@ -263,6 +265,7 @@ router.post('/', upload.single('file'), async (req: Request, res: Response): Pro
         sendSSE({ stage: 'preprocessing', pct: 12, message: 'No log.txt files found. Extracting standard logs...' });
         const fallbackText = await extractZipContents(zipBuffer, zipSizeTracker);
         fullText = fallbackText;
+        xmlCases = extractSurefireXml(fullText);
         const cleaned = preprocessLog(fallbackText);
 
         // Always hand off to the real parser rather than gating on a content
@@ -273,8 +276,28 @@ router.post('/', upload.single('file'), async (req: Request, res: Response): Pro
         // Process log.txt files
         sendSSE({ stage: 'preprocessing', pct: 12, message: `Found ${logEntries.length} log files. Scanning for failures...` });
 
+        // Bounded sample of early files' content (any status), just for
+        // extractBuildSummary's build-tool/JDK/duration signal sniffing —
+        // capped so it can never scale with archive size. Real per-case
+        // failure content lives in `logFiles` below, unaffected by this cap.
+        const BUILD_SUMMARY_SAMPLE_MAX_CHARS = 50_000;
+        let buildSummarySample = '';
+
         let processed = 0;
         for (const [path, file] of logEntries) {
+          // Opt-in fast path: skip decompressing entries whose path doesn't
+          // correspond to anything in the pasted failed-cases list at all —
+          // the big memory/speed win for large archives on constrained
+          // hosting. Trades away isLogFileMatchingQueries' content-based
+          // matching fallback for files that don't path-match (see
+          // isPathLikelyMatch below); off unless explicitly enabled.
+          if (skipNonMatching && !isPathLikelyMatch(path, customQueries)) {
+            const { suite, name } = parseNamesFromPath(path);
+            passedCases.push(createPassedCase(name, suite, passedCases.length));
+            processed++;
+            continue;
+          }
+
           // Preflight check against the declared uncompressed size, then a
           // post-decompression check as a safety net — both throw
           // ZipBombError, which is intentionally NOT caught by the
@@ -292,7 +315,19 @@ router.post('/', upload.single('file'), async (req: Request, res: Response): Pro
           zipSizeTracker.checkActual(path, content.length);
 
           try {
-            fullText += `\n=== FILE: ${path} ===\n${content}\n`;
+            if (buildSummarySample.length < BUILD_SUMMARY_SAMPLE_MAX_CHARS) {
+              const slice = content.slice(0, BUILD_SUMMARY_SAMPLE_MAX_CHARS - buildSummarySample.length);
+              buildSummarySample += `\n=== FILE: ${path} ===\n${slice}\n`;
+            }
+
+            // Extract embedded Surefire XML from THIS file only, instead of
+            // accumulating every file's content into one giant string to
+            // scan once at the end — XML blocks never span across files in
+            // this export format, so per-file extraction merged into one
+            // array is equivalent without ever holding the whole archive's
+            // decompressed text in memory simultaneously.
+            const fileXmlCases = extractSurefireXml(content);
+            if (fileXmlCases.length > 0) xmlCases.push(...fileXmlCases);
 
             // Determine if this is a failed test. A custom query list (user-
             // pasted failed-test names) is trusted directly; otherwise defer
@@ -327,6 +362,13 @@ router.post('/', upload.single('file'), async (req: Request, res: Response): Pro
             // Skip unreadable files
           }
         }
+
+        // fullText is only used downstream for extractBuildSummary's
+        // build-tool/JDK/duration heuristics — build it from the bounded
+        // sample plus the (already-retained-regardless) failed-file content,
+        // instead of every file in the archive. Peak size now scales with
+        // failure count, not archive size.
+        fullText = buildSummarySample + '\n' + Array.from(logFiles.values()).join('\n');
 
         if (logFiles.size === 0) {
           // All tests passed
@@ -365,6 +407,7 @@ router.post('/', upload.single('file'), async (req: Request, res: Response): Pro
       // pass/fail.
       const rawContent = await fs.promises.readFile(req.file.path, 'utf-8');
       fullText = rawContent;
+      xmlCases = extractSurefireXml(fullText);
       logFiles.set(filename, preprocessLog(rawContent));
     }
 
@@ -377,8 +420,9 @@ router.post('/', upload.single('file'), async (req: Request, res: Response): Pro
       filename,
     });
 
-    // Merge Surefire XML cases if any
-    const xmlCases = extractSurefireXml(fullText);
+    // Merge Surefire XML cases if any (collected per-branch above, rather
+    // than re-scanning fullText — the main ZIP branch's fullText no longer
+    // contains every file's content, so it can't be re-scanned here)
     if (xmlCases.length > 0) {
       const existingNames = new Set(result.cases.map(c => `${c.suite}::${c.name}`));
       for (const xmlCase of xmlCases) {
@@ -659,6 +703,28 @@ function parseFailedCasesList(input: string | undefined): string[] {
       if (lower.startsWith('failed tests') || lower.startsWith('failed test:')) return false;
       return true;
     });
+}
+
+/**
+ * Path/name-only subset of isLogFileMatchingQueries' matching rules, usable
+ * *before* an entry is decompressed (no content available yet). Used by the
+ * opt-in skipNonMatchingFiles fast path — deliberately excludes the
+ * content-substring check, which is the whole point (avoids ever reading the
+ * content of files this returns false for).
+ */
+function isPathLikelyMatch(path: string, queries: string[]): boolean {
+  if (queries.length === 0) return false;
+  const normPath = path.toLowerCase().replace(/\\/g, '/');
+  const { suite, name } = parseNamesFromPath(path);
+  const normSuite = suite ? suite.toLowerCase() : '';
+  const normName = name.toLowerCase();
+
+  for (const q of queries) {
+    const normQuery = q.toLowerCase().replace(/\\/g, '/');
+    if (normPath.includes(normQuery)) return true;
+    if (normQuery.includes(normName) || (normSuite && normQuery.includes(normSuite))) return true;
+  }
+  return false;
 }
 
 /**

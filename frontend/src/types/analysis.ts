@@ -104,6 +104,13 @@ export interface ProjectConfig {
   environment: string;
   knownFlaky: string;
   failedCasesInput?: string;
+  /**
+   * When true AND failedCasesInput is non-empty, files not matching the list
+   * (by name only) are never opened/decompressed at all — much lower memory
+   * on large archives, at the cost of losing content-based matching for
+   * files whose path doesn't obviously match. Off by default.
+   */
+  skipNonMatchingFiles?: boolean;
 }
 
 export interface AnalysisOptions {

@@ -52,6 +52,7 @@ const defaultConfig: ProjectConfig = {
   environment: 'CI/Docker',
   knownFlaky: '',
   failedCasesInput: '',
+  skipNonMatchingFiles: false,
 };
 
 const defaultOptions: AnalysisOptions = {

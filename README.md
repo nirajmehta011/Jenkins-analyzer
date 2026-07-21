@@ -113,12 +113,14 @@ actionable fix suggestion.
 
 ## How Large Files Are Handled
 
-1. **Streamed uploads** — Files are streamed to a temp file on disk (not buffered fully in memory), keeping peak memory low for large logs.
-2. **Preprocessing** — Strips ANSI escape codes, Maven download noise, and collapses blank lines.
-3. **Zip-bomb guard** — ZIP entries are checked against both a per-file and an aggregate uncompressed-size limit before and after decompression, so a small malicious/corrupt archive can't exhaust server memory.
-4. **Per-file parsing** — For ZIP archives following Jenkins' one-log-per-test-case export convention, each file is parsed independently and classified as passed/failed based on what the parser actually finds — not a brittle keyword guess.
+1. **Streamed uploads** — Files are streamed to a temp file on disk (not buffered fully in memory) during the HTTP upload itself.
+2. **Bounded accumulation during ZIP processing** — Each entry is decompressed, classified, and either kept (failed cases) or discarded (passed cases) as the archive is processed. Only failed-case content is retained; a small (~50KB) bounded sample of early files feeds build-tool/JDK/duration detection, so memory use scales with failure count, not archive size — a 35MB archive with a handful of failures uses far less memory than one where most tests fail.
+3. **Preprocessing** — Strips ANSI escape codes, Maven download noise, and collapses blank lines.
+4. **Zip-bomb guard** — ZIP entries are checked against both a per-file and an aggregate uncompressed-size limit before and after decompression, sized for a constrained ~512MB-1GB hosting instance by default (see `MAX_ZIP_ENTRY_UNCOMPRESSED_MB` / `MAX_ZIP_TOTAL_UNCOMPRESSED_MB` below) — raise them via env var on a larger-RAM deployment.
+5. **Per-file parsing** — For ZIP archives following Jenkins' one-log-per-test-case export convention, each file is parsed independently and classified as passed/failed based on what the parser actually finds — not a brittle keyword guess.
+6. **Optional: skip non-matching files entirely** — If you already know which specific test cases failed, paste them into "Failed Test Cases List" and check "Skip files not matching this list" (only shown once that field has content). Files whose name doesn't correspond to anything in the list are never opened or decompressed at all — the single biggest lever for keeping memory low on a large archive on constrained hosting. Off by default; trades away content-based matching for files that don't match by name, so an imprecise list can miss a failure — use it deliberately, not as the default.
 
-This approach handles logs from 10 KB to 100 MB without ever calling an AI model.
+This approach handles logs from 10 KB to 100 MB without ever calling an AI model. On a memory-constrained deployment (e.g. Render's free/Starter tier, ~512MB RAM), also see "Deploying on Low-Memory Hosts" below.
 
 ## Key Features
 
@@ -137,15 +139,24 @@ This approach handles logs from 10 KB to 100 MB without ever calling an AI model
 
 ## Environment Variables
 
-None are required to run the analyzer — log parsing is 100% local. These are only relevant if you want AI fix suggestions to fall back to a server-side key instead of one entered in the UI:
+None are required to run the analyzer — log parsing is 100% local. `MAX_ZIP_*` defaults are sized for a constrained ~512MB-1GB hosting instance; raise them if you're on a larger-RAM deployment. The `ANTHROPIC_API_KEY`/etc. vars are only relevant if you want AI fix suggestions to fall back to a server-side key instead of one entered in the UI:
 
 | Variable | Default | Description |
 |----------|---------|--------------|
 | `PORT` | `3001` | Backend server port |
 | `MAX_FILE_SIZE_MB` | `100` | Maximum upload file size (compressed) |
-| `MAX_ZIP_ENTRY_UNCOMPRESSED_MB` | `200` | Max decompressed size for a single ZIP entry |
-| `MAX_ZIP_TOTAL_UNCOMPRESSED_MB` | `500` | Max total decompressed size across a ZIP archive |
+| `MAX_ZIP_ENTRY_UNCOMPRESSED_MB` | `25` | Max decompressed size for a single ZIP entry |
+| `MAX_ZIP_TOTAL_UNCOMPRESSED_MB` | `150` | Max total decompressed size across a ZIP archive |
+| `NODE_OPTIONS` | — | Not analyzer-specific, but worth setting on low-RAM hosts — see below |
 | `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` / `OPENAI_API_KEY` / `GROQ_API_KEY` / `OPENROUTER_API_KEY` | — | Optional server-side fallback key for AI fix suggestions if none is supplied in the UI |
+
+## Deploying on Low-Memory Hosts (e.g. Render Free/Starter)
+
+The backend doesn't set a Node heap-size ceiling by default, so on a memory-constrained instance (Render's free/Starter tiers are commonly ~512MB RAM), an oversized request can be killed by the host's OS before the app ever gets a chance to return a clean error — the connection just dies mid-analysis with no error message. Setting `NODE_OPTIONS=--max-old-space-size=<N>` (in MB, comfortably below your instance's actual RAM — e.g. `400` on a 512MB instance) as an environment variable in your hosting dashboard turns that into a catchable, loggable "JavaScript heap out of memory" error instead of a silent kill. It doesn't by itself reduce memory use — pair it with:
+
+- The `MAX_ZIP_*` defaults above (already sized for this scenario; lower them further if you're on an even smaller instance).
+- The "Skip files not matching this list" option (see "How Large Files Are Handled") when you already know which specific tests failed — it avoids ever decompressing the files you don't care about, which is the biggest lever available for a large archive on constrained hosting.
+- If you're consistently hitting the ceiling even with the above, the underlying fix is more RAM — either a bigger plan on your current host, or a host that lets you configure per-instance memory more flexibly for a spiky/occasional workload like this (Fly.io, Railway, or Google Cloud Run are reasonable alternatives to evaluate).
 
 ## Tech Stack
 

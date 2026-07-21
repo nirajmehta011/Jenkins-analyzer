@@ -107,6 +107,15 @@ export interface ProjectConfig {
   environment: string;
   knownFlaky: string;
   failedCasesInput?: string;
+  /**
+   * When true AND failedCasesInput is non-empty, ZIP entries whose file path
+   * doesn't correspond to anything in that list are never decompressed at
+   * all (treated as passed from the path alone) — a large memory/speed win
+   * on big archives, at the cost of losing failedCasesInput's content-based
+   * matching fallback for files whose path doesn't obviously match. Off by
+   * default so existing behavior is unchanged unless explicitly opted in.
+   */
+  skipNonMatchingFiles?: boolean;
 }
 
 export interface AnalysisOptions {

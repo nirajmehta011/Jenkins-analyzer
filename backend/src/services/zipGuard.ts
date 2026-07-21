@@ -6,8 +6,16 @@
  */
 import type JSZip from 'jszip';
 
-export const MAX_ZIP_ENTRY_UNCOMPRESSED_MB = parseInt(process.env['MAX_ZIP_ENTRY_UNCOMPRESSED_MB'] || '200', 10);
-export const MAX_ZIP_TOTAL_UNCOMPRESSED_MB = parseInt(process.env['MAX_ZIP_TOTAL_UNCOMPRESSED_MB'] || '500', 10);
+// Defaults sized for a constrained ~512MB-1GB hosting instance (e.g. Render's
+// free/Starter tier), not just "big enough to stop an obvious zip-bomb". A
+// single request's real resident memory (zipBuffer + JSZip's internal entry
+// graph + string-copy overhead from repeated .replace()/.split() passes) runs
+// well above the raw decompressed-byte count these limits track — roughly
+// 2-3x in practice — so these are set with that overhead multiplier in mind,
+// not just a raw "how much text is too much" guess. Override via env var on
+// a larger-RAM deployment.
+export const MAX_ZIP_ENTRY_UNCOMPRESSED_MB = parseInt(process.env['MAX_ZIP_ENTRY_UNCOMPRESSED_MB'] || '25', 10);
+export const MAX_ZIP_TOTAL_UNCOMPRESSED_MB = parseInt(process.env['MAX_ZIP_TOTAL_UNCOMPRESSED_MB'] || '150', 10);
 
 const MAX_ENTRY_BYTES = MAX_ZIP_ENTRY_UNCOMPRESSED_MB * 1024 * 1024;
 const MAX_TOTAL_BYTES = MAX_ZIP_TOTAL_UNCOMPRESSED_MB * 1024 * 1024;
